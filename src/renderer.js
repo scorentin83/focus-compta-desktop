@@ -1,4 +1,5 @@
 let selectedCompany = null;
+let selectedBankAccount = null;
 
 async function loadCompanies() {
     const companies = await window.api.getCompanies();
@@ -13,9 +14,13 @@ async function loadCompanies() {
 
         li.addEventListener('click', async () => {
             selectedCompany = company;
+            selectedBankAccount = null;
 
             document.getElementById('selectedCompanyTitle').textContent = company.name;
             document.getElementById('bankSection').style.display = 'block';
+
+            document.getElementById('selectedAccountTitle').textContent = 'Sélectionne un compte bancaire';
+            document.getElementById('statementSection').style.display = 'none';
 
             await loadBankAccounts();
         });
@@ -42,6 +47,33 @@ async function loadBankAccounts() {
         ].filter(Boolean).join(' — ');
 
         li.textContent = title;
+        li.className = 'clickable';
+
+        li.addEventListener('click', async () => {
+            selectedBankAccount = account;
+
+            document.getElementById('selectedAccountTitle').textContent = title;
+            document.getElementById('statementSection').style.display = 'block';
+
+            await loadStatements();
+        });
+
+        list.appendChild(li);
+    });
+}
+
+async function loadStatements() {
+    if (!selectedBankAccount) return;
+
+    const statements = await window.api.getStatements(selectedBankAccount.id);
+
+    const list = document.getElementById('statementList');
+    list.innerHTML = '';
+
+    statements.forEach(statement => {
+        const li = document.createElement('li');
+
+        li.textContent = `${statement.filename} — importé le ${statement.imported_at}`;
 
         list.appendChild(li);
     });
@@ -84,6 +116,22 @@ document.getElementById('newBankAccount').addEventListener('click', async () => 
     ibanInput.value = '';
 
     await loadBankAccounts();
+});
+
+document.getElementById('importStatement').addEventListener('click', async () => {
+    if (!selectedBankAccount) return;
+
+    const pdf = await window.api.selectPdf();
+
+    if (!pdf) return;
+
+    await window.api.addStatement({
+        bankAccountId: selectedBankAccount.id,
+        filename: pdf.filename,
+        filepath: pdf.filepath
+    });
+
+    await loadStatements();
 });
 
 loadCompanies();
