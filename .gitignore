@@ -1,0 +1,12 @@
+node_modules/
+package-lock.json
+
+dist/
+build/
+out/
+
+*.log
+*.tmp
+
+.DS_Store
+Thumbs.db

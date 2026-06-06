@@ -1,0 +1,14 @@
+{
+  "name": "theta-compta",
+  "version": "0.1.0",
+  "description": "Theta Compta Desktop",
+  "main": "src/main.js",
+  "author": "Corentin Sauvage",
+  "license": "Private",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}
