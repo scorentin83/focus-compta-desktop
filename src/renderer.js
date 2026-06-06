@@ -1,24 +1,26 @@
-const companies = [
-    "Lucas Optical",
-    "Phil&Joe Optical"
-];
+async function loadCompanies() {
+    const companies = await window.api.getCompanies();
 
-const list = document.getElementById('companyList');
+    const list = document.getElementById('companyList');
+    list.innerHTML = '';
 
-companies.forEach(company => {
+    companies.forEach(company => {
+        const li = document.createElement('li');
+        li.textContent = company.name;
+        list.appendChild(li);
+    });
+}
 
-    const li = document.createElement('li');
+document.getElementById('newCompany').addEventListener('click', async () => {
+    const input = document.getElementById('companyName');
+    const name = input.value.trim();
 
-    li.textContent = company;
+    if (!name) return;
 
-    list.appendChild(li);
+    await window.api.addCompany(name);
 
+    input.value = '';
+    await loadCompanies();
 });
 
-document
-.getElementById('newCompany')
-.addEventListener('click', () => {
-
-    alert('Création société à venir');
-
-});
+loadCompanies();

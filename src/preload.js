@@ -1,5 +1,9 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-    version: '0.3'
+
+    addCompany: (name) => ipcRenderer.invoke('add-company', name),
+
+    getCompanies: () => ipcRenderer.invoke('get-companies')
+
 });

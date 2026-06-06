@@ -1,7 +1,7 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
-require('./database');
+const { createCompany, getCompanies } = require('./database');
 
 function createWindow() {
 
@@ -18,4 +18,18 @@ function createWindow() {
 
 app.whenReady().then(() => {
     createWindow();
+});
+
+ipcMain.handle('add-company', async (event, name) => {
+
+    createCompany(name);
+
+    return true;
+
+});
+
+ipcMain.handle('get-companies', async () => {
+
+    return getCompanies();
+
 });
