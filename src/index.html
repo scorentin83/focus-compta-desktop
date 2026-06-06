@@ -11,17 +11,37 @@
 
 <h1>Theta Compta</h1>
 
-<h2>Sociétés</h2>
+<div class="layout">
 
-<div>
-    <input id="companyName" type="text" placeholder="Nom de la société">
-    <button id="newCompany">Ajouter</button>
+    <section class="panel">
+        <h2>Sociétés</h2>
+
+        <div class="form-row">
+            <input id="companyName" type="text" placeholder="Nom de la société">
+            <button id="newCompany">Ajouter</button>
+        </div>
+
+        <ul id="companyList"></ul>
+    </section>
+
+    <section class="panel">
+        <h2 id="selectedCompanyTitle">Sélectionne une société</h2>
+
+        <div id="bankSection" style="display:none;">
+            <h3>Comptes bancaires</h3>
+
+            <div class="form-grid">
+                <input id="bankName" type="text" placeholder="Banque, ex : Crédit Agricole">
+                <input id="accountName" type="text" placeholder="Nom du compte, ex : Compte courant">
+                <input id="iban" type="text" placeholder="IBAN">
+                <button id="newBankAccount">Ajouter le compte</button>
+            </div>
+
+            <ul id="bankAccountList"></ul>
+        </div>
+    </section>
+
 </div>
-
-<ul id="companyList"></ul>
-
-<ul id="companyList">
-</ul>
 
 <script src="renderer.js"></script>
 

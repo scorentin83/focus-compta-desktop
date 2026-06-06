@@ -11,3 +11,37 @@ button{
     padding:10px 20px;
     cursor:pointer;
 }
+
+.layout {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 30px;
+}
+
+.panel {
+    border: 1px solid #ddd;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.form-row,
+.form-grid {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+input {
+    padding: 10px;
+    font-size: 14px;
+}
+
+.clickable {
+    cursor: pointer;
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.clickable:hover {
+    background: #f2f2f2;
+}

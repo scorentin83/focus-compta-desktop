@@ -11,29 +11,63 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bank_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    bank_name TEXT NOT NULL,
+    account_name TEXT,
+    iban TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(company_id) REFERENCES companies(id)
+);
 `);
 
 function createCompany(name) {
-    const stmt = db.prepare(`
+    return db.prepare(`
         INSERT INTO companies(name)
         VALUES(?)
-    `);
-
-    return stmt.run(name);
+    `).run(name);
 }
 
 function getCompanies() {
-    const stmt = db.prepare(`
+    return db.prepare(`
         SELECT *
         FROM companies
         ORDER BY name
-    `);
+    `).all();
+}
 
-    return stmt.all();
+function createBankAccount(companyId, bankName, accountName, iban) {
+    return db.prepare(`
+        INSERT INTO bank_accounts(
+            company_id,
+            bank_name,
+            account_name,
+            iban
+        )
+        VALUES(?, ?, ?, ?)
+    `).run(
+        companyId,
+        bankName,
+        accountName,
+        iban
+    );
+}
+
+function getBankAccounts(companyId) {
+    return db.prepare(`
+        SELECT *
+        FROM bank_accounts
+        WHERE company_id = ?
+        ORDER BY bank_name
+    `).all(companyId);
 }
 
 module.exports = {
     db,
     createCompany,
-    getCompanies
+    getCompanies,
+    createBankAccount,
+    getBankAccounts
 };
