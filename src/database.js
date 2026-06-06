@@ -22,6 +22,18 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
     FOREIGN KEY(company_id) REFERENCES companies(id)
 );
 
+CREATE TABLE IF NOT EXISTS bank_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bank_account_id INTEGER NOT NULL,
+    date_operation TEXT,
+    label TEXT,
+    amount REAL,
+    type TEXT,
+    pdf_source TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(bank_account_id) REFERENCES bank_accounts(id)
+);
+
 CREATE TABLE IF NOT EXISTS statements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     bank_account_id INTEGER NOT NULL,
@@ -88,12 +100,65 @@ function getStatements(bankAccountId) {
     `).all(bankAccountId);
 }
 
+function statementExists(bankAccountId, filepath) {
+    return db.prepare(`
+        SELECT *
+        FROM statements
+        WHERE bank_account_id = ?
+        AND filepath = ?
+    `).get(bankAccountId, filepath);
+}
+
+function createTransaction(
+    bankAccountId,
+    dateOperation,
+    label,
+    amount,
+    type,
+    pdfSource
+) {
+    return db.prepare(`
+        INSERT INTO bank_transactions(
+            bank_account_id,
+            date_operation,
+            label,
+            amount,
+            type,
+            pdf_source
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+        bankAccountId,
+        dateOperation,
+        label,
+        amount,
+        type,
+        pdfSource
+    );
+}
+
+function getTransactions(bankAccountId) {
+    return db.prepare(`
+        SELECT *
+        FROM bank_transactions
+        WHERE bank_account_id = ?
+        ORDER BY date_operation DESC
+    `).all(bankAccountId);
+}
+
 module.exports = {
     db,
+
     createCompany,
     getCompanies,
+
     createBankAccount,
     getBankAccounts,
+
     createStatement,
-    getStatements
+    getStatements,
+    statementExists,
+
+    createTransaction,
+    getTransactions
 };

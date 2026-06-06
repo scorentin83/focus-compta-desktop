@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('add-statement', data),
 
     getStatements: (bankAccountId) =>
-        ipcRenderer.invoke('get-statements', bankAccountId)
+        ipcRenderer.invoke('get-statements', bankAccountId),
+
+    getTransactions: (bankAccountId) =>
+        ipcRenderer.invoke('get-transactions', bankAccountId)
 
 });

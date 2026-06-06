@@ -56,6 +56,7 @@ async function loadBankAccounts() {
             document.getElementById('statementSection').style.display = 'block';
 
             await loadStatements();
+            await loadTransactions();
         });
 
         list.appendChild(li);
@@ -72,8 +73,30 @@ async function loadStatements() {
 
     statements.forEach(statement => {
         const li = document.createElement('li');
-
         li.textContent = `${statement.filename} — importé le ${statement.imported_at}`;
+        list.appendChild(li);
+    });
+}
+
+async function loadTransactions() {
+    if (!selectedBankAccount) return;
+
+    const transactions = await window.api.getTransactions(selectedBankAccount.id);
+
+    const list = document.getElementById('transactionList');
+    if (!list) return;
+
+    list.innerHTML = '';
+
+    transactions.forEach(transaction => {
+        const li = document.createElement('li');
+
+        const amount = Number(transaction.amount).toLocaleString('fr-FR', {
+            style: 'currency',
+            currency: 'EUR'
+        });
+
+        li.textContent = `${transaction.date_operation} — ${transaction.label} — ${amount}`;
 
         list.appendChild(li);
     });
@@ -125,13 +148,22 @@ document.getElementById('importStatement').addEventListener('click', async () =>
 
     if (!pdf) return;
 
-    await window.api.addStatement({
+    const result = await window.api.addStatement({
         bankAccountId: selectedBankAccount.id,
         filename: pdf.filename,
         filepath: pdf.filepath
     });
 
+   if (!result.imported) {
+    alert(result.message);
+} else {
+    alert(
+        `${result.transactionsCount} opération(s) détectée(s)`
+    );
+}
+
     await loadStatements();
+    await loadTransactions();
 });
 
 loadCompanies();
