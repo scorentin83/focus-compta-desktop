@@ -3,63 +3,294 @@
 
 <head>
 <meta charset="UTF-8">
-<title>Theta Compta</title>
+<title>Focus Compta</title>
 <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h1>Theta Compta</h1>
-
-<div class="layout">
-
-    <section class="panel">
-        <h2>Sociétés</h2>
-
-        <div class="form-row">
-            <input id="companyName" type="text" placeholder="Nom de la société">
-            <button id="newCompany">Ajouter</button>
+<div class="app-shell">
+    <aside class="main-sidebar">
+        <div class="brand-block">
+            <img src="assets/focus-logo.png" alt="Focus Compta" class="brand-logo">
+            <div>
+                <strong>FOCUS COMPTA</strong>
+                <span>The Focus Company</span>
+            </div>
         </div>
 
-        <ul id="companyList"></ul>
-    </section>
+        <nav class="main-nav">
+            <button class="nav-button active" data-page="homePage">🏠 Accueil</button>
+            <button class="nav-button" data-page="companiesPage">🏢 Sociétés</button>
+            <button class="nav-button" data-page="dashboardPage">📊 Tableau de bord</button>
+            <button class="nav-button" data-page="bankPage">🏦 Banque</button>
+            <button class="nav-button" data-page="receiptsPage">📎 Justificatifs</button>
+            <button class="nav-button" data-page="accountingPage">📚 Comptabilité</button>
+            <button class="nav-button" data-page="exportsPage">📤 Exports</button>
+            <button class="nav-button" data-page="settingsPage">⚙ Paramètres</button>
+        </nav>
 
-    <section class="panel">
-        <h2 id="selectedCompanyTitle">Sélectionne une société</h2>
+        <div class="sidebar-footer">
+            <button id="openDataFolder" class="secondary-nav-action">Dossier données</button>
+            <button id="createBackup" class="secondary-nav-action">Sauvegarde</button>
+        </div>
+    </aside>
 
-        <div id="bankSection" style="display:none;">
-            <h3>Comptes bancaires</h3>
+    <main class="main-content">
 
-            <div class="form-grid">
-                <input id="bankName" type="text" placeholder="Banque, ex : Crédit Agricole">
-                <input id="accountName" type="text" placeholder="Nom du compte, ex : Compte courant">
-                <input id="iban" type="text" placeholder="IBAN">
-                <button id="newBankAccount">Ajouter le compte</button>
+        <section id="homePage" class="page-section active-page">
+            <div class="topbar">
+                <div>
+                    <h1>Bonjour Corentin 👋</h1>
+                    <p>Voici la synthèse de vos sociétés et de la pré-comptabilité.</p>
+                </div>
+                <button id="homeAddCompany">+ Ajouter une société</button>
             </div>
 
-            <ul id="bankAccountList"></ul>
-        </div>
-    </section>
+            <h2>Mes sociétés</h2>
+            <div id="homeCompanyCards" class="company-card-grid"></div>
 
-    <section class="panel">
-        <h2 id="selectedAccountTitle">Sélectionne un compte bancaire</h2>
+            <div class="section-title-row">
+                <h2>Insights globaux</h2>
+                <span class="muted">Toutes sociétés confondues</span>
+            </div>
+            <div class="home-insights-grid">
+                <div class="insight-card"><span>Dépenses</span><strong id="homeExpenses">0 €</strong><small>Débits</small></div>
+                <div class="insight-card"><span>Encaissements</span><strong id="homeIncome">0 €</strong><small>Crédits</small></div>
+                <div class="insight-card"><span>PJ manquantes</span><strong id="homeMissing">0</strong><small id="homeMissingAmount">0 €</small></div>
+                <div class="insight-card"><span>Opérations</span><strong id="homeTransactions">0</strong><small>Total</small></div>
+                <div class="insight-card"><span>Relevés importés</span><strong id="homeStatements">0</strong><small>Total</small></div>
+                <div class="insight-card warning"><span>Alertes</span><strong id="homeAlerts">0</strong><small>À traiter</small></div>
+            </div>
 
-        <div id="statementSection" style="display:none;">
-            <h3>Relevés bancaires PDF</h3>
+            <div class="home-lower-grid">
+                <div class="panel clean-panel">
+                    <h2>Dernières activités</h2>
+                    <ul id="recentActivity" class="activity-list">
+                        <li class="muted">Aucune activité pour le moment.</li>
+                    </ul>
+                </div>
 
-            <button id="importStatement">Importer un PDF</button>
+                <div class="panel clean-panel">
+                    <h2>Dépenses par catégorie</h2>
+                    <ul id="homeCategoryBreakdown" class="mini-list">
+                        <li class="muted">Aucune donnée.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
 
-            <ul id="statementList"></ul>
+        <section id="companiesPage" class="page-section">
+            <div class="topbar">
+                <div>
+                    <h1>Sociétés</h1>
+                    <p>Créez et sélectionnez les sociétés suivies dans Focus Compta.</p>
+                </div>
+            </div>
 
-            <h3>Opérations extraites</h3>
-<ul id="transactionList"></ul>
-        </div>
-    </section>
+            <div class="panel clean-panel company-management-panel">
+                <h2>Ajouter une société</h2>
+                <div class="form-row horizontal-form">
+                    <input id="companyName" type="text" placeholder="Nom de la société">
+                    <button id="newCompany">Ajouter</button>
+                </div>
+            </div>
 
+            <div id="companyList" class="company-card-grid"></div>
+        </section>
+
+        <section id="dashboardPage" class="page-section">
+            <div class="topbar">
+                <div>
+                    <h1 id="dashboardTitle">Tableau de bord</h1>
+                    <p id="dashboardSubtitle">Sélectionnez une société et un compte bancaire pour afficher les indicateurs.</p>
+                </div>
+                <button class="nav-shortcut" data-page="bankPage">Aller à la banque</button>
+            </div>
+
+            <div id="dashboardAccountSummary" class="summary-cards" style="display:none;">
+                <div class="summary-card"><span>Opérations</span><strong id="dashboardTotalOps">0</strong></div>
+                <div class="summary-card success"><span>Justifiées</span><strong id="dashboardVerifiedOps">0</strong></div>
+                <div class="summary-card danger"><span>Manquantes</span><strong id="dashboardMissingOps">0</strong></div>
+                <div class="summary-card"><span>Crédits</span><strong id="dashboardCreditTotal">0 €</strong></div>
+                <div class="summary-card"><span>Débits</span><strong id="dashboardDebitTotal">0 €</strong></div>
+            </div>
+
+            <div id="dashboardPanel" class="dashboard-panel" style="display:none;">
+                <div class="dashboard-box">
+                    <h3>À justifier</h3>
+                    <strong id="dashboardMissingAmount">0 €</strong>
+                    <span id="dashboardMissingCount" class="muted">0 opération</span>
+                </div>
+                <div class="dashboard-box">
+                    <h3>Dépenses par catégorie</h3>
+                    <ul id="dashboardCategories" class="mini-list"></ul>
+                </div>
+                <div class="dashboard-box">
+                    <h3>Top fournisseurs</h3>
+                    <ul id="dashboardSuppliers" class="mini-list"></ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="bankPage" class="page-section">
+            <div class="topbar">
+                <div>
+                    <h1>Banque</h1>
+                    <p>Importez les relevés, pointez les opérations et ajoutez les justificatifs.</p>
+                </div>
+                <div id="statementSection" class="statement-actions" style="display:none;">
+                    <button id="smartReceipt">Pointer PJ</button>
+                    <button id="importStatement">Importer un relevé PDF</button>
+                </div>
+            </div>
+
+            <div class="bank-layout">
+                <section class="panel sidebar-panel">
+                    <h2>Société sélectionnée</h2>
+                    <p id="selectedCompanyTitle" class="muted">Aucune société sélectionnée</p>
+
+                    <div id="bankSection" style="display:none;">
+                        <h2>Comptes bancaires</h2>
+                        <div class="form-grid compact-form">
+                            <input id="bankName" type="text" placeholder="Banque, ex : Crédit Agricole">
+                            <input id="accountName" type="text" placeholder="Nom du compte">
+                            <input id="iban" type="text" placeholder="IBAN">
+                            <button id="newBankAccount">Ajouter le compte</button>
+                        </div>
+                        <ul id="bankAccountList" class="nav-list"></ul>
+                    </div>
+
+                    <div id="statementSidebar" class="statement-sidebar" style="display:none;">
+                        <h2>Relevés</h2>
+                        <label for="statementSelect">Relevé sélectionné</label>
+                        <select id="statementSelect">
+                            <option value="all">Tous les relevés</option>
+                        </select>
+                        <p id="statementMeta" class="muted">Aucun relevé sélectionné.</p>
+                        <div class="statement-sidebar-buttons">
+                            <button id="openSelectedStatement" disabled>Ouvrir</button>
+                            <button id="deleteSelectedStatement" class="danger-button" disabled>Supprimer</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel operations-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2 id="selectedAccountTitle">Sélectionne un compte bancaire</h2>
+                            <p class="muted">Opérations bancaires</p>
+                        </div>
+                    </div>
+
+                    <div id="summaryCards" class="summary-cards" style="display:none;">
+                        <div class="summary-card"><span>Opérations</span><strong id="summaryTotal">0</strong></div>
+                        <div class="summary-card success"><span>Justifiées</span><strong id="summaryAttached">0</strong></div>
+                        <div class="summary-card danger"><span>Manquantes</span><strong id="summaryMissing">0</strong></div>
+                        <div class="summary-card"><span>Crédits</span><strong id="summaryCredit">0 €</strong></div>
+                        <div class="summary-card"><span>Débits</span><strong id="summaryDebit">0 €</strong></div>
+                    </div>
+
+                    <div id="toolsPanel" class="tools-panel" style="display:none;">
+                        <div class="tool-field wide">
+                            <label>Recherche</label>
+                            <input id="searchInput" type="text" placeholder="Libellé, montant, catégorie, note, relevé...">
+                        </div>
+                        <div class="tool-field"><label>Année</label><select id="yearFilter"><option value="all">Toutes</option></select></div>
+                        <div class="tool-field"><label>Mois</label><select id="monthFilter"><option value="all">Tous</option></select></div>
+                        <div class="tool-field">
+                            <label>Statut</label>
+                            <select id="statusFilter">
+                                <option value="all">Tous</option>
+                                <option value="missing">Justificatif manquant</option>
+                                <option value="attached">Pièce jointe</option>
+                                <option value="verified">Vérifié</option>
+                                <option value="review">À vérifier</option>
+                                <option value="ignored">Ignoré</option>
+                            </select>
+                        </div>
+                        <div class="tool-field button-field"><button id="resetFilters">Réinitialiser</button></div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table id="transactionTable" class="bank-table" style="display:none;">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Libellé</th>
+                                    <th>Montant</th>
+                                    <th>Catégorie</th>
+                                    <th>Statut</th>
+                                    <th>Justifs</th>
+                                    <th>Relevé</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactionTableBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="panel detail-panel">
+                    <h2>Détail opération</h2>
+                    <div id="transactionDetailEmpty" class="empty-state">Sélectionne une opération pour la pointer ou ajouter un justificatif.</div>
+                    <div id="transactionDetail" style="display:none;">
+                        <div class="detail-block"><span class="muted">Date</span><strong id="detailDate"></strong></div>
+                        <div class="detail-block"><span class="muted">Libellé</span><strong id="detailLabel"></strong></div>
+                        <div class="detail-block"><span class="muted">Montant</span><strong id="detailAmount"></strong></div>
+                        <div class="detail-block"><span class="muted">Relevé source</span><strong id="detailStatement"></strong></div>
+                        <label>Statut</label>
+                        <select id="detailStatus">
+                            <option value="missing">Justificatif manquant</option>
+                            <option value="attached">Pièce jointe</option>
+                            <option value="verified">Vérifié</option>
+                            <option value="review">À vérifier</option>
+                            <option value="ignored">Ignoré</option>
+                        </select>
+                        <label>Catégorie</label>
+                        <input id="detailCategory" type="text" placeholder="Ex : Fournisseur, Frais bancaires, Apport CCA">
+                        <label>Notes</label>
+                        <textarea id="detailNotes" rows="4" placeholder="Note interne pour le pointage ou l'expert-comptable"></textarea>
+                        <div class="button-row">
+                            <button id="saveTransactionDetails">Enregistrer</button>
+                            <button id="addReceipt">Ajouter justificatif</button>
+                        </div>
+                        <h3>Justificatifs</h3>
+                        <div id="receiptPreview" class="receipt-preview muted">Aucun aperçu sélectionné.</div>
+                        <ul id="receiptList" class="receipt-list"></ul>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <section id="receiptsPage" class="page-section">
+            <div class="topbar"><div><h1>Justificatifs</h1><p>Retrouvez les pièces jointes et les opérations restant à justifier.</p></div></div>
+            <div class="panel clean-panel"><p class="muted">La vue avancée des justificatifs arrivera dans une prochaine version. Pour l'instant, les justificatifs se gèrent depuis la page Banque.</p></div>
+        </section>
+
+        <section id="accountingPage" class="page-section">
+            <div class="topbar"><div><h1>Comptabilité</h1><p>Catégories, préparation comptable et rapprochements.</p></div></div>
+            <div class="panel clean-panel">
+                <h2>Préparation comptable</h2>
+                <p class="muted">Les catégories automatiques sont déjà appliquées dans la page Banque. Cette page accueillera ensuite le plan comptable, les exports et les écritures.</p>
+            </div>
+        </section>
+
+        <section id="exportsPage" class="page-section">
+            <div class="topbar"><div><h1>Exports</h1><p>Exports CSV, Excel et préparation expert-comptable.</p></div></div>
+            <div class="panel clean-panel"><p class="muted">À venir : export opérations, export justificatifs manquants, export comptable.</p></div>
+        </section>
+
+        <section id="settingsPage" class="page-section">
+            <div class="topbar"><div><h1>Paramètres</h1><p>Configuration locale et sauvegardes.</p></div></div>
+            <div class="panel clean-panel button-row">
+                <button id="openDataFolderSettings">Ouvrir FocusComptaData</button>
+                <button id="createBackupSettings">Créer une sauvegarde locale</button>
+            </div>
+        </section>
+
+    </main>
 </div>
 
 <script src="renderer.js"></script>
-
 </body>
-
 </html>
