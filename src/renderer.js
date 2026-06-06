@@ -2,7 +2,11 @@ let selectedCompany = null;
 let selectedBankAccount = null;
 let selectedStatementId = 'all';
 let selectedTransaction = null;
+let selectedRibFilepath = null;
 let searchTimer = null;
+let selectedTransactionIds = new Set();
+let categoryRules = [];
+let selectedDocumentId = null;
 
 const MONTH_LABELS = {
     '01': 'Janvier',
@@ -176,6 +180,96 @@ function getStatusLabel(status) {
     return labels[status] || '❌ Manquant';
 }
 
+
+async function loadCategoryOptions() {
+    categoryRules = await window.api.getCategoryRules();
+    const categories = [...new Set(categoryRules.map(rule => rule.category).filter(Boolean))].sort();
+    const targets = ['detailCategory', 'bulkCategory'];
+    targets.forEach(id => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = id === 'bulkCategory' ? '<option value="">Catégorie...</option>' : '<option value="">Non catégorisé</option>';
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            select.appendChild(option);
+        });
+        if (current) select.value = current;
+    });
+
+    const rulesList = document.getElementById('categoryRulesList');
+    if (rulesList) {
+        rulesList.innerHTML = '';
+        categoryRules.forEach(rule => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${rule.keyword}</span><strong>${rule.category}</strong>`;
+            rulesList.appendChild(li);
+        });
+    }
+}
+
+function updateBulkToolbar() {
+    const toolbar = document.getElementById('bulkToolbar');
+    const count = document.getElementById('bulkCount');
+    const all = document.getElementById('selectAllTransactions');
+    if (!toolbar || !count) return;
+    count.textContent = selectedTransactionIds.size;
+    toolbar.style.display = selectedTransactionIds.size > 0 ? 'flex' : 'none';
+    if (all) all.checked = false;
+}
+
+function maskIban(iban) {
+    const value = String(iban || '').replace(/\s+/g, '');
+    if (!value) return '';
+    if (value.length <= 8) return value;
+    return `${value.slice(0, 4)} **** **** ${value.slice(-4)}`;
+}
+
+function bankAccountTitle(account) {
+    return [account.bank_name, account.account_name].filter(Boolean).join(' — ') || 'Compte bancaire';
+}
+
+function showBankAccountEdit(account) {
+    selectedBankAccount = account;
+    selectedRibFilepath = null;
+
+    document.getElementById('bankAccountForm').style.display = 'none';
+    document.getElementById('bankAccountEdit').style.display = 'block';
+    document.getElementById('editBankName').value = account.bank_name || '';
+    document.getElementById('editAccountName').value = account.account_name || '';
+    document.getElementById('editAccountNumber').value = account.account_number || '';
+    document.getElementById('editIban').value = account.iban || '';
+    document.getElementById('editBic').value = account.bic || '';
+    document.getElementById('editBankNotes').value = account.notes || '';
+    document.getElementById('editRibLabel').textContent = account.rib_path ? 'RIB enregistré.' : 'Aucun RIB enregistré.';
+}
+
+async function selectBankAccount(account) {
+    selectedBankAccount = account;
+    selectedStatementId = 'all';
+
+    const title = bankAccountTitle(account);
+    document.getElementById('selectedAccountTitle').textContent = title;
+    const dashboardTitle = document.getElementById('dashboardTitle');
+    const dashboardSubtitle = document.getElementById('dashboardSubtitle');
+    if (dashboardTitle) dashboardTitle.textContent = selectedCompany ? `${selectedCompany.name}` : 'Tableau de bord';
+    if (dashboardSubtitle) dashboardSubtitle.textContent = `${title}`;
+
+    document.getElementById('statementSection').style.display = 'block';
+    document.getElementById('summaryCards').style.display = 'grid';
+    document.getElementById('toolsPanel').style.display = 'grid';
+    document.getElementById('dashboardPanel').style.display = 'grid';
+    document.getElementById('transactionTable').style.display = 'table';
+    document.getElementById('statementSidebar').style.display = 'block';
+
+    document.getElementById('bankAccountEdit').style.display = 'none';
+    document.getElementById('bankAccountForm').style.display = 'none';
+    resetTransactionDetail();
+    await refreshAccountView(true);
+}
+
 function getFilters() {
     return {
         search: document.getElementById('searchInput')?.value.trim() || '',
@@ -255,39 +349,54 @@ async function loadBankAccounts() {
     const list = document.getElementById('bankAccountList');
     list.innerHTML = '';
 
+    if (accounts.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state compact-empty';
+        empty.textContent = 'Aucun compte bancaire. Ajoute un compte pour importer les relevés.';
+        list.appendChild(empty);
+        document.getElementById('bankAccountForm').style.display = 'block';
+        return;
+    }
+
     accounts.forEach(account => {
-        const li = document.createElement('li');
+        const card = document.createElement('article');
+        card.className = 'bank-account-card';
+        if (selectedBankAccount && selectedBankAccount.id === account.id) {
+            card.classList.add('selected');
+        }
 
-        const title = [
-            account.bank_name,
-            account.account_name,
-            account.iban
-        ].filter(Boolean).join(' — ');
+        const ibanMasked = maskIban(account.iban);
+        const accountNumber = account.account_number ? `<span>Compte : ${account.account_number}</span>` : '';
+        const bic = account.bic ? `<span>BIC : ${account.bic}</span>` : '';
+        const rib = account.rib_path ? '<span class="rib-pill">RIB PDF</span>' : '<span class="muted">RIB manquant</span>';
 
-        li.textContent = title;
-        li.className = 'clickable';
+        card.innerHTML = `
+            <div class="bank-card-main">
+                <strong>${bankAccountTitle(account)}</strong>
+                <span>${ibanMasked || 'IBAN non renseigné'}</span>
+                ${accountNumber}
+                ${bic}
+            </div>
+            <div class="bank-card-actions">
+                ${rib}
+                <button class="secondary-button small-button" type="button">Modifier</button>
+            </div>
+        `;
 
-        li.addEventListener('click', async () => {
-            selectedBankAccount = account;
-            selectedStatementId = 'all';
-
-            document.getElementById('selectedAccountTitle').textContent = title;
-            const dashboardTitle = document.getElementById('dashboardTitle');
-            const dashboardSubtitle = document.getElementById('dashboardSubtitle');
-            if (dashboardTitle) dashboardTitle.textContent = selectedCompany ? `${selectedCompany.name}` : 'Tableau de bord';
-            if (dashboardSubtitle) dashboardSubtitle.textContent = `${title}`;
-            document.getElementById('statementSection').style.display = 'block';
-            document.getElementById('summaryCards').style.display = 'grid';
-            document.getElementById('toolsPanel').style.display = 'grid';
-            document.getElementById('dashboardPanel').style.display = 'grid';
-            document.getElementById('transactionTable').style.display = 'table';
-            document.getElementById('statementSidebar').style.display = 'block';
-
-            resetTransactionDetail();
-            await refreshAccountView(true);
+        card.addEventListener('click', async event => {
+            if (event.target.tagName === 'BUTTON') {
+                showBankAccountEdit(account);
+                return;
+            }
+            await selectBankAccount(account);
         });
 
-        list.appendChild(li);
+        card.querySelector('button').addEventListener('click', event => {
+            event.stopPropagation();
+            showBankAccountEdit(account);
+        });
+
+        list.appendChild(card);
     });
 }
 
@@ -511,10 +620,12 @@ async function loadTransactions() {
 
     const body = document.getElementById('transactionTableBody');
     body.innerHTML = '';
+    selectedTransactionIds.clear();
+    updateBulkToolbar();
 
     if (transactions.length === 0) {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td colspan="7" class="muted">Aucune opération ne correspond aux filtres.</td>';
+        tr.innerHTML = '<td colspan="8" class="muted">Aucune opération ne correspond aux filtres.</td>';
         body.appendChild(tr);
         return;
     }
@@ -526,15 +637,48 @@ async function loadTransactions() {
         const amount = Number(transaction.amount || 0);
         const amountClass = amount >= 0 ? 'amount-credit' : 'amount-debit';
 
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.addEventListener('click', event => {
+            event.stopPropagation();
+            if (checkbox.checked) selectedTransactionIds.add(transaction.id);
+            else selectedTransactionIds.delete(transaction.id);
+            updateBulkToolbar();
+        });
+
+        const categorySelect = document.createElement('select');
+        categorySelect.className = 'inline-category-select';
+        categorySelect.innerHTML = '<option value="">Non catégorisé</option>';
+        [...new Set(categoryRules.map(rule => rule.category).filter(Boolean))].sort().forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            categorySelect.appendChild(option);
+        });
+        categorySelect.value = transaction.category || '';
+        categorySelect.addEventListener('click', event => event.stopPropagation());
+        categorySelect.addEventListener('change', async event => {
+            await window.api.updateTransactionDetails({
+                transactionId: transaction.id,
+                category: event.target.value,
+                notes: transaction.notes || ''
+            });
+            await refreshAccountView(false);
+        });
+
         tr.innerHTML = `
+            <td></td>
             <td>${transaction.date_operation || ''}</td>
             <td>${transaction.label || ''}</td>
             <td class="${amountClass}">${formatAmount(amount)}</td>
-            <td>${transaction.category || '<span class="muted">Non catégorisé</span>'}</td>
+            <td class="category-cell"></td>
             <td>${getStatusLabel(transaction.status)}</td>
-            <td>${transaction.receipts_count || 0}</td>
-            <td>${transaction.statement_filename || ''}</td>
+            <td class="icon-cell" title="${transaction.receipts_count || 0} justificatif(s)">📎 ${transaction.receipts_count || 0}</td>
+            <td class="icon-cell statement-icon-cell" title="${transaction.statement_filename || 'Relevé source'}">📄</td>
         `;
+
+        tr.children[0].appendChild(checkbox);
+        tr.querySelector('.category-cell').appendChild(categorySelect);
 
         tr.addEventListener('click', async () => {
             await showTransactionDetail(transaction.id);
@@ -550,6 +694,7 @@ async function showTransactionDetail(transactionId) {
 
     document.getElementById('transactionDetailEmpty').style.display = 'none';
     document.getElementById('transactionDetail').style.display = 'block';
+    document.getElementById('detailPanel')?.classList.add('open');
 
     document.getElementById('detailDate').textContent = transaction.date_operation || '';
     document.getElementById('detailLabel').textContent = transaction.label || '';
@@ -641,17 +786,19 @@ async function loadReceipts(transactionId) {
 document.getElementById('newCompany').addEventListener('click', async () => {
     const input = document.getElementById('companyName');
     const name = input.value.trim();
-
     if (!name) return;
 
     await window.api.addCompany(name);
     input.value = '';
-    await 
+    await loadCompanies();
+});
 
 document.querySelectorAll('.nav-button, .nav-shortcut').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
         const pageId = button.dataset.page;
         if (pageId) showPage(pageId);
+        if (pageId === 'receiptsPage') await loadDocuments();
+        if (pageId === 'settingsPage') await loadCategoryOptions();
     });
 });
 
@@ -675,19 +822,20 @@ if (createBackupSettingsButton) {
     });
 }
 
-loadCompanies();
-});
-
 document.getElementById('newBankAccount').addEventListener('click', async () => {
     if (!selectedCompany) return;
 
     const bankNameInput = document.getElementById('bankName');
     const accountNameInput = document.getElementById('accountName');
+    const accountNumberInput = document.getElementById('accountNumber');
     const ibanInput = document.getElementById('iban');
+    const bicInput = document.getElementById('bic');
 
     const bankName = bankNameInput.value.trim();
     const accountName = accountNameInput.value.trim();
+    const accountNumber = accountNumberInput.value.trim();
     const iban = ibanInput.value.trim();
+    const bic = bicInput.value.trim();
 
     if (!bankName) return;
 
@@ -695,37 +843,131 @@ document.getElementById('newBankAccount').addEventListener('click', async () => 
         companyId: selectedCompany.id,
         bankName,
         accountName,
-        iban
+        accountNumber,
+        iban,
+        bic
     });
 
     bankNameInput.value = '';
     accountNameInput.value = '';
+    accountNumberInput.value = '';
     ibanInput.value = '';
+    bicInput.value = '';
 
+    document.getElementById('bankAccountForm').style.display = 'none';
     await loadBankAccounts();
 });
 
-document.getElementById('importStatement').addEventListener('click', async () => {
+const toggleBankFormButton = document.getElementById('toggleBankForm');
+if (toggleBankFormButton) {
+    toggleBankFormButton.addEventListener('click', () => {
+        const form = document.getElementById('bankAccountForm');
+        const edit = document.getElementById('bankAccountEdit');
+        edit.style.display = 'none';
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+}
+
+const selectRibButton = document.getElementById('selectRib');
+if (selectRibButton) {
+    selectRibButton.addEventListener('click', async () => {
+        const rib = await window.api.selectRib();
+        if (!rib) return;
+        selectedRibFilepath = rib.filepath;
+        document.getElementById('editRibLabel').textContent = `Nouveau RIB sélectionné : ${rib.filename}`;
+    });
+}
+
+const saveBankAccountButton = document.getElementById('saveBankAccount');
+if (saveBankAccountButton) {
+    saveBankAccountButton.addEventListener('click', async () => {
+        if (!selectedBankAccount || !selectedCompany) return;
+
+        await window.api.updateBankAccount({
+            id: selectedBankAccount.id,
+            companyName: selectedCompany.name,
+            bankName: document.getElementById('editBankName').value.trim(),
+            accountName: document.getElementById('editAccountName').value.trim(),
+            accountNumber: document.getElementById('editAccountNumber').value.trim(),
+            iban: document.getElementById('editIban').value.trim(),
+            bic: document.getElementById('editBic').value.trim(),
+            notes: document.getElementById('editBankNotes').value.trim(),
+            ribFilepath: selectedRibFilepath
+        });
+
+        selectedRibFilepath = null;
+        await loadBankAccounts();
+        const accounts = await window.api.getBankAccounts(selectedCompany.id);
+        const updated = accounts.find(account => account.id === selectedBankAccount.id);
+        if (updated) await selectBankAccount(updated);
+    });
+}
+
+
+const cancelBankEditButton = document.getElementById('cancelBankEdit');
+if (cancelBankEditButton) {
+    cancelBankEditButton.addEventListener('click', () => {
+        document.getElementById('bankAccountEdit').style.display = 'none';
+        selectedRibFilepath = null;
+    });
+}
+
+const openRibButton = document.getElementById('openRib');
+if (openRibButton) {
+    openRibButton.addEventListener('click', async () => {
+        if (!selectedBankAccount || !selectedBankAccount.rib_path) {
+            alert('Aucun RIB enregistré pour ce compte.');
+            return;
+        }
+        await window.api.openFile(selectedBankAccount.rib_path);
+    });
+}
+
+const deleteBankAccountButton = document.getElementById('deleteBankAccount');
+if (deleteBankAccountButton) {
+    deleteBankAccountButton.addEventListener('click', async () => {
+        if (!selectedBankAccount) return;
+        const confirmed = confirm(`Supprimer le compte ${bankAccountTitle(selectedBankAccount)} ?\n\nCette action est possible uniquement s'il n'a aucun relevé lié.`);
+        if (!confirmed) return;
+        const result = await window.api.deleteBankAccount(selectedBankAccount.id);
+        alert(result.message);
+        if (result.deleted) {
+            selectedBankAccount = null;
+            document.getElementById('bankAccountEdit').style.display = 'none';
+            document.getElementById('selectedAccountTitle').textContent = 'Sélectionne un compte bancaire';
+            await loadBankAccounts();
+        }
+    });
+}
+
+async function importStatementsFlow() {
     if (!selectedBankAccount) return;
 
-    const pdf = await window.api.selectPdf();
-    if (!pdf) return;
+    const pdfs = await window.api.selectPdf();
+    if (!pdfs || pdfs.length === 0) return;
 
-    const result = await window.api.addStatement({
+    const files = Array.isArray(pdfs) ? pdfs : [pdfs];
+    const bulk = await window.api.addStatementsBulk({
         bankAccountId: selectedBankAccount.id,
-        filename: pdf.filename,
-        filepath: pdf.filepath
+        files
     });
 
-    if (!result.imported) {
-        alert(result.message);
-    } else {
-        alert(`${result.transactionsCount} opération(s) détectée(s)`);
-        selectedStatementId = String(result.statementId);
+    let message = `Import terminé\n\n${bulk.importedCount} relevé(s) importé(s)\n${bulk.skippedCount} ignoré(s)\n${bulk.transactionsCount} opération(s) ajoutée(s)`;
+    const notBalanced = (bulk.results || []).filter(row => row.imported && row.importReport && !row.importReport.isBalanced);
+    if (notBalanced.length > 0) {
+        message += `\n\n⚠️ ${notBalanced.length} relevé(s) avec écart de contrôle.`;
     }
+    alert(message);
+
+    const lastImported = [...(bulk.results || [])].reverse().find(row => row.imported);
+    if (lastImported) selectedStatementId = String(lastImported.statementId);
 
     await refreshAccountView(true);
-});
+}
+
+document.getElementById('importStatement').addEventListener('click', importStatementsFlow);
+const importStatementSidebarButton = document.getElementById('importStatementSidebar');
+if (importStatementSidebarButton) importStatementSidebarButton.addEventListener('click', importStatementsFlow);
 
 document.getElementById('statementSelect').addEventListener('change', async () => {
     selectedStatementId = document.getElementById('statementSelect').value || 'all';
@@ -790,7 +1032,8 @@ document.getElementById('addReceipt').addEventListener('click', async () => {
     await window.api.addReceipt({
         transactionId: selectedTransaction.id,
         filename: receipt.filename,
-        filepath: receipt.filepath
+        filepath: receipt.filepath,
+        companyId: selectedCompany ? selectedCompany.id : null
     });
 
     await showTransactionDetail(selectedTransaction.id);
@@ -879,31 +1122,367 @@ if (createBackupButton) {
 
 
 
-document.querySelectorAll('.nav-button, .nav-shortcut').forEach(button => {
-    button.addEventListener('click', () => {
-        const pageId = button.dataset.page;
-        if (pageId) showPage(pageId);
+const selectAllTransactions = document.getElementById('selectAllTransactions');
+if (selectAllTransactions) {
+    selectAllTransactions.addEventListener('change', () => {
+        document.querySelectorAll('#transactionTableBody input[type="checkbox"]').forEach(input => {
+            input.checked = selectAllTransactions.checked;
+            const row = input.closest('tr');
+            const date = row?.children?.[1]?.textContent;
+            // IDs are tracked by individual checkbox events; trigger click if needed.
+            input.dispatchEvent(new Event('click', { bubbles: false }));
+            if (input.checked !== selectAllTransactions.checked) input.checked = selectAllTransactions.checked;
+        });
     });
+}
+
+const applyBulkUpdateButton = document.getElementById('applyBulkUpdate');
+if (applyBulkUpdateButton) {
+    applyBulkUpdateButton.addEventListener('click', async () => {
+        if (selectedTransactionIds.size === 0) return;
+        const updates = {};
+        const category = document.getElementById('bulkCategory').value;
+        const status = document.getElementById('bulkStatus').value;
+        const notes = document.getElementById('bulkNotes').value.trim();
+        if (category) updates.category = category;
+        if (status) updates.status = status;
+        if (notes) updates.notes = notes;
+        if (Object.keys(updates).length === 0) return;
+        await window.api.bulkUpdateTransactions({ ids: [...selectedTransactionIds], updates });
+        selectedTransactionIds.clear();
+        document.getElementById('bulkNotes').value = '';
+        await refreshAccountView(false);
+    });
+}
+
+const clearSelectionButton = document.getElementById('clearSelection');
+if (clearSelectionButton) {
+    clearSelectionButton.addEventListener('click', () => {
+        selectedTransactionIds.clear();
+        document.querySelectorAll('#transactionTableBody input[type="checkbox"]').forEach(input => input.checked = false);
+        updateBulkToolbar();
+    });
+}
+
+async function loadDocuments() {
+    const list = document.getElementById('documentList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const docs = await window.api.getDocuments({
+        companyId: selectedCompany ? selectedCompany.id : null,
+        filters: {
+            status: document.getElementById('documentStatusFilter')?.value || 'all',
+            search: document.getElementById('documentSearch')?.value || ''
+        }
+    });
+
+    const stats = document.getElementById('documentStatsV023');
+    if (stats) {
+        const matched = docs.filter(doc => doc.status === 'matched').length;
+        const unmatched = docs.length - matched;
+        stats.textContent = `${docs.length} document(s) · ${matched} rapproché(s) · ${unmatched} à rapprocher`;
+    }
+
+    if (docs.length === 0) {
+        list.innerHTML = '<div class="empty-state">Aucun document. Importez des factures ou ajoutez une PJ depuis une opération.</div>';
+        return;
+    }
+
+    docs.forEach(doc => {
+        const item = document.createElement('article');
+        item.className = `document-card ${doc.status === 'matched' ? 'matched' : 'unmatched'}`;
+        item.innerHTML = `
+            <div class="document-card-main">
+                <strong>${doc.filename}</strong>
+                <span>${doc.status === 'matched' ? '✅ Rapproché' : '🟡 À rapprocher'}</span>
+                <span>${doc.detected_amount ? formatAmount(doc.detected_amount) : 'Montant non détecté'}</span>
+                ${doc.transaction_label ? `<small>Lié à : ${doc.date_operation || ''} — ${doc.transaction_label} · ${formatAmount(doc.transaction_amount)}</small>` : '<small>Non lié à une opération.</small>'}
+            </div>
+            <div class="button-row">
+                <button class="open-doc">Ouvrir</button>
+                <button class="match-doc">Suggestions</button>
+                <button class="manual-doc">Associer manuellement</button>
+                <button class="danger-button delete-doc">Supprimer</button>
+            </div>
+        `;
+
+        item.querySelector('.open-doc').addEventListener('click', async () => await window.api.openFile(doc.filepath));
+        item.querySelector('.delete-doc').addEventListener('click', async () => {
+            if (!confirm(`Supprimer ce document ?\n${doc.filename}`)) return;
+            await window.api.deleteDocument(doc.id);
+            await loadDocuments();
+        });
+        item.querySelector('.match-doc').addEventListener('click', async () => await showDocumentMatches(doc.id));
+        item.querySelector('.manual-doc').addEventListener('click', async () => await showManualDocumentLink(doc.id, doc.filename));
+        list.appendChild(item);
+    });
+}
+
+
+async function showManualDocumentLink(documentId, filename = '') {
+    selectedDocumentId = documentId;
+    const target = document.getElementById('documentMatchList');
+    const help = document.getElementById('documentMatchHelp');
+    if (!target) return;
+    target.innerHTML = '';
+
+    if (!selectedCompany) {
+        if (help) help.textContent = 'Sélectionne une société pour associer ce document.';
+        return;
+    }
+
+    if (help) help.textContent = `Association manuelle : ${filename}`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'manual-link-box-v023';
+    wrapper.innerHTML = `
+        <label>Rechercher une opération</label>
+        <div class="manual-link-search-row">
+            <input id="manualOperationSearchV023" type="text" placeholder="Libellé, montant, fournisseur, date...">
+            <button id="manualOperationSearchButtonV023">Rechercher</button>
+        </div>
+        <div id="manualOperationResultsV023" class="document-match-list"></div>
+    `;
+    target.appendChild(wrapper);
+
+    const input = wrapper.querySelector('#manualOperationSearchV023');
+    const button = wrapper.querySelector('#manualOperationSearchButtonV023');
+    const results = wrapper.querySelector('#manualOperationResultsV023');
+
+    async function runSearch() {
+        const query = input.value.trim();
+        results.innerHTML = '<div class="empty-state">Recherche...</div>';
+
+        const rows = await window.api.searchTransactionsForDocument({
+            companyId: selectedCompany.id,
+            query,
+            limit: 30
+        });
+
+        results.innerHTML = '';
+        if (!rows || rows.length === 0) {
+            results.innerHTML = '<div class="empty-state">Aucune opération trouvée.</div>';
+            return;
+        }
+
+        rows.forEach(row => {
+            const card = document.createElement('article');
+            card.className = 'match-card manual-match-card-v023';
+            card.innerHTML = `
+                <strong>${row.date_operation || ''} — ${row.label}</strong>
+                <span>${formatAmount(row.amount)} · ${row.category || 'Non catégorisé'} · ${row.receipts_count || 0} PJ</span>
+                <button>Associer</button>
+            `;
+            card.querySelector('button').addEventListener('click', async () => {
+                await window.api.linkDocumentToTransaction({ documentId, transactionId: row.id });
+                await loadDocuments();
+                await showDocumentMatches(documentId);
+                if (selectedBankAccount) await refreshAccountView(false);
+            });
+            results.appendChild(card);
+        });
+    }
+
+    button.addEventListener('click', runSearch);
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') runSearch();
+    });
+
+    input.value = filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+    await runSearch();
+}
+
+async function showDocumentMatches(documentId) {
+    selectedDocumentId = documentId;
+    const target = document.getElementById('documentMatchList');
+    const help = document.getElementById('documentMatchHelp');
+    if (!target) return;
+    target.innerHTML = '';
+    if (!selectedCompany) {
+        help.textContent = 'Sélectionne une société pour obtenir des suggestions.';
+        return;
+    }
+    const matches = await window.api.findDocumentMatches({ companyId: selectedCompany.id, documentId, limit: 8 });
+    help.textContent = matches.length ? 'Suggestions triées par pertinence.' : 'Aucune suggestion trouvée.';
+    matches.forEach(match => {
+        const card = document.createElement('article');
+        card.className = 'match-card';
+        card.innerHTML = `
+            <strong>${match.date_operation || ''} — ${match.label}</strong>
+            <span>${formatAmount(match.amount)} · score ${match.match_score}</span>
+            <button>Associer</button>
+        `;
+        card.querySelector('button').addEventListener('click', async () => {
+            await window.api.linkDocumentToTransaction({ documentId, transactionId: match.id });
+            await loadDocuments();
+            await showDocumentMatches(documentId);
+            if (selectedBankAccount) await refreshAccountView(false);
+        });
+        target.appendChild(card);
+    });
+}
+
+const importDocumentsButton = document.getElementById('importDocuments');
+if (importDocumentsButton) {
+    importDocumentsButton.addEventListener('click', async () => {
+        const files = await window.api.selectDocuments();
+        if (!files || files.length === 0) return;
+        const result = await window.api.addDocuments({ companyId: selectedCompany ? selectedCompany.id : null, files });
+        alert(`${result.addedCount} document(s) ajouté(s).`);
+        await loadDocuments();
+    });
+}
+
+['documentStatusFilter', 'documentSearch'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', loadDocuments);
+    if (el) el.addEventListener('change', loadDocuments);
 });
 
-const homeAddCompanyButton = document.getElementById('homeAddCompany');
-if (homeAddCompanyButton) {
-    homeAddCompanyButton.addEventListener('click', () => showPage('companiesPage'));
-}
-
-const openDataFolderSettingsButton = document.getElementById('openDataFolderSettings');
-if (openDataFolderSettingsButton) {
-    openDataFolderSettingsButton.addEventListener('click', async () => {
-        await window.api.openDataFolder();
+const addCategoryRuleButton = document.getElementById('addCategoryRule');
+if (addCategoryRuleButton) {
+    addCategoryRuleButton.addEventListener('click', async () => {
+        const keyword = document.getElementById('categoryKeyword').value.trim();
+        const category = document.getElementById('categoryName').value.trim();
+        if (!keyword || !category) return;
+        await window.api.addCategoryRule({ keyword, category });
+        document.getElementById('categoryKeyword').value = '';
+        document.getElementById('categoryName').value = '';
+        await loadCategoryOptions();
     });
 }
 
-const createBackupSettingsButton = document.getElementById('createBackupSettings');
-if (createBackupSettingsButton) {
-    createBackupSettingsButton.addEventListener('click', async () => {
-        const result = await window.api.createBackup();
-        if (result && result.ok) alert(`Sauvegarde créée :\n${result.backupDir}`);
+loadCategoryOptions();
+
+
+const closeDetailButton = document.getElementById('closeDetailPanel');
+if (closeDetailButton) {
+    closeDetailButton.addEventListener('click', () => {
+        document.getElementById('detailPanel')?.classList.remove('open');
     });
 }
 
 loadCompanies();
+
+
+/* ===========================
+   Focus Compta V0.22 UX layer
+   Sidebar compacte + tiroir détail + tableau compact
+   =========================== */
+
+(function initFocusComptaV022UX() {
+    function ready(fn) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn);
+        } else {
+            fn();
+        }
+    }
+
+    ready(() => {
+        document.body.classList.add('v022');
+
+        const sidebar = document.querySelector('.sidebar, aside, nav');
+        if (sidebar && !document.getElementById('sidebarToggleV022')) {
+            sidebar.classList.add('focus-sidebar');
+
+            const toggle = document.createElement('button');
+            toggle.id = 'sidebarToggleV022';
+            toggle.className = 'sidebar-toggle-v022';
+            toggle.type = 'button';
+            toggle.title = 'Réduire / déployer le menu';
+            toggle.textContent = '☰';
+
+            sidebar.prepend(toggle);
+
+            const stored = localStorage.getItem('focus_sidebar_collapsed');
+            if (stored === '1') document.body.classList.add('sidebar-collapsed');
+
+            toggle.addEventListener('click', () => {
+                document.body.classList.toggle('sidebar-collapsed');
+                localStorage.setItem(
+                    'focus_sidebar_collapsed',
+                    document.body.classList.contains('sidebar-collapsed') ? '1' : '0'
+                );
+            });
+        }
+
+        // Convertit la zone détail opération en tiroir si elle existe.
+        const detailCandidates = Array.from(document.querySelectorAll('section, aside, div'))
+            .filter(el => /détail opération|detail opération|detail operation/i.test(el.textContent || ''));
+
+        const detail = detailCandidates.find(el => {
+            const title = el.querySelector('h1,h2,h3');
+            return title && /détail opération|detail opération|detail operation/i.test(title.textContent || '');
+        }) || document.getElementById('operationDetail') || document.querySelector('.operation-detail, .detail-panel');
+
+        if (detail) {
+            detail.classList.add('operation-detail-drawer-v022');
+            if (!detail.querySelector('.drawer-close-v022')) {
+                const close = document.createElement('button');
+                close.className = 'drawer-close-v022';
+                close.type = 'button';
+                close.textContent = '×';
+                close.title = 'Fermer le détail';
+                close.addEventListener('click', () => detail.classList.remove('open'));
+                detail.prepend(close);
+            }
+        }
+
+        // Ouvre le tiroir au clic sur une ligne opération.
+        document.addEventListener('click', (event) => {
+            const row = event.target.closest('tr, .transaction-row, .operation-row');
+            if (!row) return;
+            if (!/montant|catégorie|statut|justif|relevé|libellé/i.test(row.textContent || '')) return;
+            if (detail) detail.classList.add('open');
+        });
+
+        // Compactage de l’affichage des tableaux d’opérations.
+        document.querySelectorAll('table').forEach(table => {
+            if (/libellé|montant|catégorie|statut/i.test(table.textContent || '')) {
+                table.classList.add('operations-table-v022');
+                const wrapper = table.parentElement;
+                if (wrapper) wrapper.classList.add('table-scroll-v022');
+            }
+        });
+
+        // Ajoute une entrée Documents si absente.
+        if (sidebar && !/Documents/i.test(sidebar.textContent || '')) {
+            const docs = document.createElement('button');
+            docs.className = 'nav-item nav-documents-v022';
+            docs.type = 'button';
+            docs.title = 'Documents';
+            docs.innerHTML = '<span class="nav-icon">📂</span><span class="nav-label">Documents</span>';
+            docs.addEventListener('click', () => {
+                const existing = document.getElementById('documentsPageV022');
+                if (existing) {
+                    existing.scrollIntoView({ behavior: 'smooth' });
+                    return;
+                }
+                const main = document.querySelector('main, .main, .content, #app') || document.body;
+                const page = document.createElement('section');
+                page.id = 'documentsPageV022';
+                page.className = 'placeholder-card-v022';
+                page.innerHTML = `
+                    <h2>Documents</h2>
+                    <p>Module prêt pour la prochaine étape : import multi-factures, documents à rapprocher, rapprochés et orphelins.</p>
+                    <div class="placeholder-grid-v022">
+                        <div><strong>À rapprocher</strong><br>Factures en attente de règlement associé.</div>
+                        <div><strong>Rapprochés</strong><br>Documents déjà liés à une opération.</div>
+                        <div><strong>Orphelins</strong><br>Documents sans suggestion fiable.</div>
+                    </div>
+                `;
+                main.prepend(page);
+            });
+            sidebar.appendChild(docs);
+        }
+
+        // Icônes compactes pour les entêtes longs si possible.
+        document.querySelectorAll('th').forEach(th => {
+            const t = th.textContent.trim().toLowerCase();
+            if (t === 'justifs' || t === 'justificatifs') th.textContent = '📎';
+            if (t === 'relevé' || t === 'releve') th.textContent = '📄';
+        });
+    });
+})();

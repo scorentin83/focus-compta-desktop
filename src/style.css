@@ -458,3 +458,661 @@ select optgroup { font-weight: 700; color: var(--blue); }
     .home-insights-grid { grid-template-columns: repeat(2, 1fr); }
     .tools-panel { grid-template-columns: 1fr; }
 }
+
+/* V0.17 - Banque UX */
+.section-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.secondary-button {
+    background: #eef4ff;
+    color: #1f4fa3;
+    border: 1px solid #c9daf8;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.small-button {
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
+.bank-account-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.bank-account-card {
+    border: 1px solid #d7e2f4;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 14px;
+    cursor: pointer;
+    transition: 0.16s ease;
+    box-shadow: 0 8px 22px rgba(22, 52, 96, 0.06);
+}
+
+.bank-account-card:hover,
+.bank-account-card.selected {
+    border-color: #2e6df6;
+    box-shadow: 0 10px 28px rgba(46, 109, 246, 0.14);
+    transform: translateY(-1px);
+}
+
+.bank-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #10233f;
+}
+
+.bank-card-main strong {
+    font-size: 15px;
+}
+
+.bank-card-main span {
+    font-size: 13px;
+    color: #52657f;
+}
+
+.bank-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.rib-pill {
+    color: #0f8a45;
+    background: #e6f7ee;
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.bank-account-form {
+    border: 1px solid #d7e2f4;
+    background: #f8fbff;
+    border-radius: 16px;
+    padding: 14px;
+    margin-top: 12px;
+}
+
+.bank-account-form h3 {
+    margin: 0 0 10px;
+}
+
+.bank-account-form input,
+.bank-account-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+}
+
+.rib-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 8px 0 12px;
+}
+
+.compact-empty {
+    padding: 12px;
+    font-size: 14px;
+}
+
+.bulk-toolbar {
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #cfe0ff;
+    background: #f4f8ff;
+    border-radius: 12px;
+    flex-wrap: wrap;
+}
+
+.bulk-toolbar select,
+.bulk-toolbar input {
+    min-width: 160px;
+}
+
+.inline-category-select {
+    min-width: 150px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid #d7dce5;
+    background: #fff;
+}
+
+.primary-wide {
+    width: 100%;
+    margin-bottom: 12px;
+}
+
+.documents-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.document-list,
+.document-match-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.document-card,
+.match-card {
+    display: grid;
+    gap: 6px;
+    border: 1px solid #e1e6ef;
+    border-radius: 12px;
+    padding: 12px;
+    background: #fff;
+}
+
+.document-card small,
+.match-card span {
+    color: #667085;
+}
+
+.category-cell select {
+    width: 100%;
+}
+
+
+/* V0.21 - Responsive banque */
+.detail-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.detail-panel-header h2 { margin: 0; }
+
+.icon-button {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef4ff;
+    color: #1f4fa3;
+    border: 1px solid #c9daf8;
+    font-size: 20px;
+    line-height: 1;
+}
+
+.drawer-close { display: none; }
+
+.bank-table th:first-child,
+.bank-table td:first-child {
+    width: 34px;
+    text-align: center;
+}
+
+.bank-table th:nth-child(2),
+.bank-table td:nth-child(2) { width: 74px; white-space: nowrap; }
+.bank-table th:nth-child(4),
+.bank-table td:nth-child(4) { width: 125px; white-space: nowrap; text-align: right; }
+.bank-table th:nth-child(5),
+.bank-table td:nth-child(5) { width: 150px; }
+.bank-table th:nth-child(6),
+.bank-table td:nth-child(6) { width: 110px; }
+.bank-table th:nth-child(7),
+.bank-table td:nth-child(7),
+.bank-table th:nth-child(8),
+.bank-table td:nth-child(8) {
+    width: 54px;
+    text-align: center;
+}
+
+.bank-table td:nth-child(3) {
+    min-width: 280px;
+    max-width: 560px;
+}
+
+.icon-cell {
+    font-size: 16px !important;
+    white-space: nowrap;
+    color: #334155 !important;
+}
+
+.statement-icon-cell { cursor: help; }
+
+@media (max-width: 1600px) {
+    .main-content { padding: 22px; }
+    .bank-layout { grid-template-columns: 310px minmax(720px, 1fr); }
+    .detail-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: min(440px, 92vw);
+        height: 100vh;
+        overflow: auto;
+        z-index: 100;
+        border-radius: 0;
+        box-shadow: -18px 0 40px rgba(15, 23, 42, 0.20);
+        transform: translateX(105%);
+        transition: transform 0.22s ease;
+    }
+    .detail-panel.open { transform: translateX(0); }
+    .drawer-close { display: inline-flex; }
+    .operations-panel { min-width: 0; }
+    .table-wrapper { overflow-x: auto; }
+    .bank-table { min-width: 980px; }
+}
+
+@media (max-width: 1250px) {
+    .bank-layout { grid-template-columns: 1fr; }
+    .sidebar-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        align-items: start;
+    }
+    .statement-sidebar { margin-top: 0; padding-top: 0; border-top: none; }
+    .summary-cards { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+    .tools-panel { grid-template-columns: 1.5fr 110px 120px 150px 120px; }
+}
+
+@media (max-width: 850px) {
+    .main-content { padding: 16px; }
+    .topbar { flex-direction: column; align-items: stretch; }
+    .statement-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .sidebar-panel { grid-template-columns: 1fr; }
+    .summary-cards { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    .tools-panel { grid-template-columns: 1fr; }
+    .bulk-toolbar { display: grid !important; grid-template-columns: 1fr; }
+    .bank-table { min-width: 860px; }
+}
+
+
+/* ===========================
+   Focus Compta V0.22 - Ergonomie responsive
+   =========================== */
+
+:root {
+    --sidebar-expanded-v022: 280px;
+    --sidebar-collapsed-v022: 74px;
+    --drawer-width-v022: 430px;
+}
+
+body.v022 {
+    overflow-x: hidden;
+}
+
+/* Sidebar rétractable */
+.focus-sidebar {
+    transition: width .22s ease, min-width .22s ease;
+    overflow-x: hidden;
+}
+
+.sidebar-toggle-v022 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    margin: 10px 12px 8px auto;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(255,255,255,.13);
+    color: #fff;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.sidebar-toggle-v022:hover {
+    background: rgba(255,255,255,.22);
+}
+
+body.sidebar-collapsed .focus-sidebar {
+    width: var(--sidebar-collapsed-v022) !important;
+    min-width: var(--sidebar-collapsed-v022) !important;
+    max-width: var(--sidebar-collapsed-v022) !important;
+}
+
+body.sidebar-collapsed .focus-sidebar .nav-label,
+body.sidebar-collapsed .focus-sidebar span:not(.nav-icon),
+body.sidebar-collapsed .focus-sidebar .sidebar-title,
+body.sidebar-collapsed .focus-sidebar .brand-text,
+body.sidebar-collapsed .focus-sidebar h1,
+body.sidebar-collapsed .focus-sidebar h2,
+body.sidebar-collapsed .focus-sidebar p,
+body.sidebar-collapsed .focus-sidebar small {
+    display: none !important;
+}
+
+body.sidebar-collapsed .focus-sidebar img,
+body.sidebar-collapsed .focus-sidebar .logo {
+    max-width: 42px !important;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+body.sidebar-collapsed .focus-sidebar button,
+body.sidebar-collapsed .focus-sidebar a {
+    justify-content: center !important;
+}
+
+/* Donne plus de place au contenu si le layout utilise une marge fixe */
+body.sidebar-collapsed main,
+body.sidebar-collapsed .main,
+body.sidebar-collapsed .content,
+body.sidebar-collapsed #app {
+    transition: margin-left .22s ease;
+}
+
+/* Banque : grille plus souple */
+.bank-layout,
+.bank-grid,
+.bank-page-grid {
+    grid-template-columns: minmax(230px, 300px) minmax(680px, 1fr) !important;
+    gap: 22px !important;
+}
+
+/* Le détail devient un tiroir au lieu de manger la largeur centrale */
+.operation-detail-drawer-v022 {
+    position: fixed !important;
+    top: 0;
+    right: 0;
+    width: min(var(--drawer-width-v022), 92vw);
+    height: 100vh;
+    background: #fff;
+    z-index: 1000;
+    box-shadow: -18px 0 40px rgba(15, 23, 42, .18);
+    padding: 28px;
+    overflow-y: auto;
+    transform: translateX(104%);
+    transition: transform .22s ease;
+    border-left: 1px solid rgba(15, 23, 42, .08);
+}
+
+.operation-detail-drawer-v022.open {
+    transform: translateX(0);
+}
+
+.drawer-close-v022 {
+    position: sticky;
+    top: 0;
+    float: right;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-size: 25px;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.drawer-close-v022:hover {
+    background: #e2e8f0;
+}
+
+/* Table opérations compacte */
+.table-scroll-v022 {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+.operations-table-v022 {
+    min-width: 820px;
+    width: 100%;
+    table-layout: auto;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.operations-table-v022 th,
+.operations-table-v022 td {
+    padding: 10px 12px !important;
+    vertical-align: middle;
+}
+
+.operations-table-v022 th:first-child,
+.operations-table-v022 td:first-child {
+    width: 34px;
+}
+
+.operations-table-v022 th:nth-child(2),
+.operations-table-v022 td:nth-child(2) {
+    width: 72px;
+    white-space: nowrap;
+}
+
+.operations-table-v022 th:nth-child(4),
+.operations-table-v022 td:nth-child(4) {
+    width: 130px;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.operations-table-v022 th:nth-child(5),
+.operations-table-v022 td:nth-child(5) {
+    width: 150px;
+}
+
+.operations-table-v022 td {
+    line-height: 1.25;
+}
+
+.operations-table-v022 td:nth-child(3) {
+    max-width: 620px;
+}
+
+/* Bloc Documents placeholder */
+.placeholder-card-v022 {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 24px;
+    margin: 18px 0;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+}
+
+.placeholder-grid-v022 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.placeholder-grid-v022 > div {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+}
+
+/* Responsive */
+@media (max-width: 1500px) {
+    .bank-layout,
+    .bank-grid,
+    .bank-page-grid {
+        grid-template-columns: minmax(210px, 280px) minmax(620px, 1fr) !important;
+    }
+}
+
+@media (max-width: 1150px) {
+    body:not(.sidebar-collapsed) .focus-sidebar {
+        width: var(--sidebar-collapsed-v022) !important;
+        min-width: var(--sidebar-collapsed-v022) !important;
+        max-width: var(--sidebar-collapsed-v022) !important;
+    }
+
+    body:not(.sidebar-collapsed) .focus-sidebar .nav-label,
+    body:not(.sidebar-collapsed) .focus-sidebar span:not(.nav-icon),
+    body:not(.sidebar-collapsed) .focus-sidebar .sidebar-title,
+    body:not(.sidebar-collapsed) .focus-sidebar .brand-text,
+    body:not(.sidebar-collapsed) .focus-sidebar h1,
+    body:not(.sidebar-collapsed) .focus-sidebar h2,
+    body:not(.sidebar-collapsed) .focus-sidebar p,
+    body:not(.sidebar-collapsed) .focus-sidebar small {
+        display: none !important;
+    }
+
+    .bank-layout,
+    .bank-grid,
+    .bank-page-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media (max-width: 820px) {
+    .operations-table-v022 {
+        min-width: 760px;
+        font-size: 13px;
+    }
+
+    .placeholder-grid-v022 {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ===========================
+   Focus Compta V0.23
+   Ergonomie + Documents bidirectionnels
+   =========================== */
+
+:root {
+    --sidebar-collapsed-v022: 86px;
+    --drawer-width-v022: 360px;
+}
+
+body.sidebar-collapsed .main-sidebar,
+body.sidebar-collapsed .focus-sidebar {
+    width: 86px !important;
+    min-width: 86px !important;
+    max-width: 86px !important;
+}
+
+body.sidebar-collapsed .main-sidebar .nav-button,
+body.sidebar-collapsed .focus-sidebar .nav-button {
+    width: 54px !important;
+    min-width: 54px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    font-size: 0 !important;
+}
+
+body.sidebar-collapsed .main-sidebar .nav-button::first-letter,
+body.sidebar-collapsed .focus-sidebar .nav-button::first-letter {
+    font-size: 20px !important;
+}
+
+body.sidebar-collapsed .main-sidebar .brand-block {
+    justify-content: center !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+body.sidebar-collapsed .main-sidebar .brand-logo {
+    width: 52px !important;
+    height: 52px !important;
+}
+
+body.sidebar-collapsed .main-sidebar .brand-block > div,
+body.sidebar-collapsed .main-sidebar .sidebar-footer {
+    display: none !important;
+}
+
+.operation-detail-drawer-v022 {
+    width: min(360px, 90vw) !important;
+    padding: 22px !important;
+}
+
+.document-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.document-card.matched {
+    border-left: 4px solid #22c55e;
+}
+
+.document-card.unmatched {
+    border-left: 4px solid #f59e0b;
+}
+
+.document-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.manual-link-box-v023 {
+    border: 1px solid #dbeafe;
+    background: #f8fbff;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.manual-link-search-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.manual-match-card-v023 {
+    border-left: 4px solid #3b82f6;
+}
+
+.document-stats-v023 {
+    margin: 8px 0 14px;
+    font-weight: 600;
+}
+
+/* Plus d'espace pour la zone centrale Banque */
+.bank-layout,
+.bank-grid,
+.bank-page-grid {
+    grid-template-columns: minmax(220px, 280px) minmax(760px, 1fr) !important;
+}
+
+/* Compactage visuel compte/relevés */
+#bankAccountList,
+#statementList,
+.statement-sidebar,
+#statementSidebar {
+    font-size: 14px;
+}
+
+@media (max-width: 1500px) {
+    .bank-layout,
+    .bank-grid,
+    .bank-page-grid {
+        grid-template-columns: minmax(200px, 250px) minmax(700px, 1fr) !important;
+    }
+
+    .operation-detail-drawer-v022 {
+        width: min(340px, 90vw) !important;
+    }
+}

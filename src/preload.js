@@ -5,10 +5,14 @@ contextBridge.exposeInMainWorld('api', {
     getCompanies: () => ipcRenderer.invoke('get-companies'),
 
     addBankAccount: (data) => ipcRenderer.invoke('add-bank-account', data),
+    updateBankAccount: (data) => ipcRenderer.invoke('update-bank-account', data),
+    deleteBankAccount: (bankAccountId) => ipcRenderer.invoke('delete-bank-account', bankAccountId),
     getBankAccounts: (companyId) => ipcRenderer.invoke('get-bank-accounts', companyId),
+    selectRib: () => ipcRenderer.invoke('select-rib'),
 
     selectPdf: () => ipcRenderer.invoke('select-pdf'),
     addStatement: (data) => ipcRenderer.invoke('add-statement', data),
+    addStatementsBulk: (data) => ipcRenderer.invoke('add-statements-bulk', data),
     getStatements: (bankAccountId) => ipcRenderer.invoke('get-statements', bankAccountId),
     deleteStatement: (statementId) => ipcRenderer.invoke('delete-statement', statementId),
 
@@ -25,6 +29,18 @@ contextBridge.exposeInMainWorld('api', {
     addReceipt: (data) => ipcRenderer.invoke('add-receipt', data),
     getReceipts: (transactionId) => ipcRenderer.invoke('get-receipts', transactionId),
     deleteReceipt: (receiptId) => ipcRenderer.invoke('delete-receipt', receiptId),
+
+    getCategoryRules: () => ipcRenderer.invoke('get-category-rules'),
+    addCategoryRule: (data) => ipcRenderer.invoke('add-category-rule', data),
+    bulkUpdateTransactions: (data) => ipcRenderer.invoke('bulk-update-transactions', data),
+
+    selectDocuments: () => ipcRenderer.invoke('select-documents'),
+    addDocuments: (data) => ipcRenderer.invoke('add-documents', data),
+    getDocuments: (data) => ipcRenderer.invoke('get-documents', data),
+    deleteDocument: (documentId) => ipcRenderer.invoke('delete-document', documentId),
+    findDocumentMatches: (data) => ipcRenderer.invoke('find-document-matches', data),
+    searchTransactionsForDocument: (data) => ipcRenderer.invoke('search-transactions-for-document', data),
+    linkDocumentToTransaction: (data) => ipcRenderer.invoke('link-document-to-transaction', data),
 
     openFile: (filepath) => ipcRenderer.invoke('open-file', filepath),
 

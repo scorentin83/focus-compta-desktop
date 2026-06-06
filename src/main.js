@@ -9,14 +9,18 @@ const {
     DATA_DIR,
     STATEMENTS_DIR,
     RECEIPTS_DIR,
+    RIB_DIR,
     BACKUPS_DIR,
     DB_PATH,
     createCompany,
     getCompanies,
     createBankAccount,
+    updateBankAccount,
+    deleteBankAccount,
     getBankAccounts,
     createStatement,
     updateStatementPeriod,
+    updateStatementFinancials,
     getStatements,
     statementExists,
     getStatementFiles,
@@ -30,6 +34,17 @@ const {
     getAvailablePeriods,
     getDashboardInsights,
     findReceiptMatches,
+    getCategoryRules,
+    addCategoryRule,
+    updateTransactionsBulk,
+    createDocument,
+    createDocumentForReceipt,
+    getDocuments,
+    getDocument,
+    deleteDocument,
+    linkDocumentToTransaction,
+    findDocumentMatches,
+    searchTransactionsForDocument,
     createReceipt,
     getReceipt,
     getReceipts,
@@ -261,33 +276,223 @@ function normalizeForRules(value) {
 function guessTransactionType(label) {
     const lowerLabel = normalizeForRules(label);
 
-    // Crédit Agricole : les crédits identifiés dans les relevés fournis
-    // correspondent surtout aux apports et aux déblocages de prêts.
-    const creditRules = [
-        /^real pret\b/,
-        /^virement apport\b/,
-        /^virement focus apport\b/,
-        /^virement sauvage\b/,
-        /^virement m arnaud\b/
-    ];
-
+    // V0.19 : ordre volontairement strict.
+    // 1) On reconnaît d'abord les familles qui sont toujours au débit.
+    // 2) Les virements restants sont considérés comme crédits entrants.
+    // Cela corrige les relevés Crédit Agricole professionnels avec beaucoup de TP,
+    // CPAM, mutuelles, remises cartes et virements reçus.
     const debitRules = [
         /^prlv\b/,
-        /^regul annul\.?\s+virement\b/,
-        /^virement ag\b/,
-        /^virement vir inst vers\b/,
-        /^virement web\b/,
-        /cotis/,
-        /frais/,
-        /facture credit agricole/
+        /^prelevement\b/,
+        /^cotis\b/,
+        /^com\s+carte\b/,
+        /^commission\b/,
+        /^frais\b/,
+        /^ech\s+pret\b/,
+        /^effets\s+domicilies\b/,
+        /^paiement\b/,
+        /^carte\b/,
+        /^cb\b/,
+        /^regul\s+annul\.?\s+virement\b/,
+        /^virement\s+ag\b/,
+        /^virement\s+vir\s+inst\s+vers\b/,
+        /^virement\s+web\b/,
+        /^virement\s+.*\bvers\b/,
+        /facture\s+credit\s+agricole/,
+        /tenue\s+de\s+compte/,
+        /urssaf/,
+        /dgfip/,
+        /edf|electricite\s+de\s+france/,
+        /orange/,
+        /loyer/,
+        /charges/,
+        /salaire|salair/,
+        /malakoff/,
+        /grandvision/,
+        /leasecom|cegelease/,
+        /cabinet\s+cv\s+consultants/,
+        /abc\s+media/,
+        /avem/,
+        /pacifica|assurance/,
+        /allianz\s+sante/,
+        /edenred/,
+        /kering\s+eyewear/
     ];
 
-    if (creditRules.some(rule => rule.test(lowerLabel))) return 'credit';
-    if (debitRules.some(rule => rule.test(lowerLabel))) return 'debit';
+    const creditRules = [
+        /^real\s+pret\b/,
+        /^remise\b/,
+        /^rem\s+chq\b/,
+        /^versement\b/,
+        /^depot\b/,
+        /^encaissement\b/,
+        /^virement\s+apport\b/,
+        /^virement\s+focus\s+apport\b/,
+        /^virement\s+sauvage\b/,
+        /^virement\s+m\s+arnaud\b/,
+        /^virement\s+vir\s+inst\s+de\b/,
+        /^virement\s+paiements\s+mutuelles\b/,
+        /^virement\b/,
+        /^vir\b/
+    ];
 
-    // Par sécurité comptable, une opération non reconnue est à traiter en débit
-    // plutôt qu'en crédit. Elle pourra ensuite être corrigée manuellement.
+    if (debitRules.some(rule => rule.test(lowerLabel))) return 'debit';
+    if (creditRules.some(rule => rule.test(lowerLabel))) return 'credit';
+
+    // Une ligne non reconnue est conservatrice : à vérifier en débit.
     return 'debit';
+}
+
+
+function extractStatementBalances(text) {
+    const value = String(text || '');
+    const oldMatch = value.match(/Ancien solde\s+(créditeur|débiteur)\s+au\s+[\d.]+\s+([\d\s]+,\d{2})/i);
+    const newMatch = value.match(/Nouveau solde\s+(créditeur|débiteur)\s+au\s+[\d.]+\s+([\d\s]+,\d{2})/i);
+
+    const oldType = oldMatch ? oldMatch[1].toLowerCase() : '';
+    const newType = newMatch ? newMatch[1].toLowerCase() : '';
+    const oldAmount = oldMatch ? parseFrenchAmount(oldMatch[2]) : null;
+    const newAmount = newMatch ? parseFrenchAmount(newMatch[2]) : null;
+
+    return {
+        oldBalance: oldAmount === null ? null : (oldType.includes('déb') || oldType.includes('deb') ? -oldAmount : oldAmount),
+        newBalance: newAmount === null ? null : (newType.includes('déb') || newType.includes('deb') ? -newAmount : newAmount),
+        balanceType: newType || ''
+    };
+}
+
+function detectAmountFromFilename(filename) {
+    const base = String(filename || '').replace(/[_-]/g, ' ');
+    const matches = [...base.matchAll(/(\d{1,3}(?:[\s.]\d{3})*|\d{1,6})[,.](\d{2})/g)];
+    if (matches.length === 0) return null;
+    const last = matches[matches.length - 1][0].replace('.', ' ').replace(',', ',');
+    return parseFrenchAmount(last);
+}
+
+function detectReferenceFromFilename(filename) {
+    const base = String(filename || '');
+    const match = base.match(/(?:F|FA|FACT|FACTURE)[-_\s]?\d{2,}[-_\s]?\d*|\b\d{4,}\b/i);
+    return match ? match[0].replace(/[_\s]+/g, '-') : '';
+}
+
+function processStatementPdf(data) {
+    return (async () => {
+        const existing = statementExists(data.bankAccountId, data.filepath);
+
+        if (existing) {
+            return {
+                imported: false,
+                message: 'PDF déjà importé',
+                transactionsCount: 0,
+                filename: data.filename
+            };
+        }
+
+        const buffer = fs.readFileSync(data.filepath);
+        const parser = new PDFParse({ data: buffer });
+        const parsed = await parser.getText();
+        const period = extractStatementPeriod(parsed.text, data.filename);
+        const balances = extractStatementBalances(parsed.text);
+
+        const storedStatement = copyToFocusData(data.filepath, [
+            STATEMENTS_DIR,
+            period.year || 'SansAnnee',
+            period.month || 'SansMois'
+        ]);
+
+        const statementResult = createStatement(
+            data.bankAccountId,
+            storedStatement.filename,
+            storedStatement.filepath,
+            data.filepath,
+            period.year,
+            period.month
+        );
+
+        const statementId = statementResult.lastInsertRowid;
+
+        const transactions = parseCreditAgricoleTransactions(
+            parsed.text,
+            data.bankAccountId,
+            statementId,
+            storedStatement.filename
+        );
+
+        const importReport = buildImportReport(parsed.text, transactions);
+        updateStatementPeriod(statementId, period.year, period.month);
+        updateStatementFinancials(statementId, {
+            oldBalance: balances.oldBalance,
+            newBalance: balances.newBalance,
+            balanceType: balances.balanceType,
+            reportJson: JSON.stringify(importReport)
+        });
+
+        return {
+            imported: true,
+            statementId,
+            transactionsCount: transactions.length,
+            statementYear: period.year,
+            statementMonth: period.month,
+            oldBalance: balances.oldBalance,
+            newBalance: balances.newBalance,
+            balanceType: balances.balanceType,
+            importReport,
+            filename: storedStatement.filename
+        };
+    })();
+}
+
+function extractExpectedStatementTotals(text) {
+    const match = String(text || '').match(/Total\s+des\s+opérations\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})/i);
+
+    if (!match) {
+        return {
+            debit: null,
+            credit: null
+        };
+    }
+
+    return {
+        debit: parseFrenchAmount(match[1]),
+        credit: parseFrenchAmount(match[2])
+    };
+}
+
+function calculateTransactionsTotals(transactions) {
+    return transactions.reduce((totals, transaction) => {
+        if (transaction.amount < 0) {
+            totals.debit += Math.abs(transaction.amount);
+        } else {
+            totals.credit += transaction.amount;
+        }
+        return totals;
+    }, { debit: 0, credit: 0 });
+}
+
+function roundMoney(value) {
+    return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function buildImportReport(text, transactions) {
+    const expected = extractExpectedStatementTotals(text);
+    const imported = calculateTransactionsTotals(transactions);
+
+    const debitDifference = expected.debit === null ? null : roundMoney(imported.debit - expected.debit);
+    const creditDifference = expected.credit === null ? null : roundMoney(imported.credit - expected.credit);
+
+    return {
+        expectedDebit: expected.debit,
+        expectedCredit: expected.credit,
+        importedDebit: roundMoney(imported.debit),
+        importedCredit: roundMoney(imported.credit),
+        debitDifference,
+        creditDifference,
+        isBalanced:
+            expected.debit !== null &&
+            expected.credit !== null &&
+            debitDifference === 0 &&
+            creditDifference === 0
+    };
 }
 
 function shouldIgnoreStatementLine(line) {
@@ -433,17 +638,13 @@ ipcMain.handle('get-companies', async () => {
 });
 
 ipcMain.handle('add-bank-account', async (event, data) => {
-    createBankAccount(data.companyId, data.bankName, data.accountName, data.iban);
+    createBankAccount(data);
     return true;
 });
 
-ipcMain.handle('get-bank-accounts', async (event, companyId) => {
-    return getBankAccounts(companyId);
-});
-
-ipcMain.handle('select-pdf', async () => {
+ipcMain.handle('select-rib', async () => {
     const result = await dialog.showOpenDialog({
-        title: 'Importer un relevé bancaire PDF',
+        title: 'Ajouter un RIB PDF',
         filters: [
             { name: 'PDF', extensions: ['pdf'] }
         ],
@@ -460,54 +661,77 @@ ipcMain.handle('select-pdf', async () => {
     return { filename, filepath };
 });
 
-ipcMain.handle('add-statement', async (event, data) => {
-    const existing = statementExists(data.bankAccountId, data.filepath);
+ipcMain.handle('update-bank-account', async (event, data) => {
+    let ribPath = null;
+    let ribOriginalPath = null;
 
-    if (existing) {
-        return {
-            imported: false,
-            message: 'PDF déjà importé',
-            transactionsCount: 0
-        };
+    if (data.ribFilepath) {
+        const storedRib = copyToFocusData(data.ribFilepath, [
+            RIB_DIR,
+            safeFilename(data.companyName || 'Societe').replace(/\.pdf$/i, ''),
+            safeFilename(data.bankName || 'Banque').replace(/\.pdf$/i, '')
+        ]);
+        ribPath = storedRib.filepath;
+        ribOriginalPath = data.ribFilepath;
     }
 
-    const buffer = fs.readFileSync(data.filepath);
-    const parser = new PDFParse({ data: buffer });
-    const parsed = await parser.getText();
-    const period = extractStatementPeriod(parsed.text, data.filename);
+    updateBankAccount({
+        ...data,
+        ribPath,
+        ribOriginalPath
+    });
 
-    const storedStatement = copyToFocusData(data.filepath, [
-        STATEMENTS_DIR,
-        period.year || 'SansAnnee',
-        period.month || 'SansMois'
-    ]);
+    return true;
+});
 
-    const statementResult = createStatement(
-        data.bankAccountId,
-        storedStatement.filename,
-        storedStatement.filepath,
-        data.filepath,
-        period.year,
-        period.month
-    );
+ipcMain.handle('delete-bank-account', async (event, bankAccountId) => {
+    return deleteBankAccount(bankAccountId);
+});
 
-    const statementId = statementResult.lastInsertRowid;
+ipcMain.handle('get-bank-accounts', async (event, companyId) => {
+    return getBankAccounts(companyId);
+});
 
-    const transactions = parseCreditAgricoleTransactions(
-        parsed.text,
-        data.bankAccountId,
-        statementId,
-        storedStatement.filename
-    );
+ipcMain.handle('select-pdf', async () => {
+    const result = await dialog.showOpenDialog({
+        title: 'Importer des relevés bancaires PDF',
+        filters: [
+            { name: 'PDF', extensions: ['pdf'] }
+        ],
+        properties: ['openFile', 'multiSelections']
+    });
 
-    updateStatementPeriod(statementId, period.year, period.month);
+    if (result.canceled || result.filePaths.length === 0) {
+        return null;
+    }
+
+    return result.filePaths.map(filepath => ({
+        filename: path.basename(filepath),
+        filepath
+    }));
+});
+
+ipcMain.handle('add-statement', async (event, data) => {
+    return processStatementPdf(data);
+});
+
+ipcMain.handle('add-statements-bulk', async (event, data) => {
+    const files = Array.isArray(data.files) ? data.files : [];
+    const results = [];
+
+    for (const file of files) {
+        results.push(await processStatementPdf({
+            bankAccountId: data.bankAccountId,
+            filename: file.filename,
+            filepath: file.filepath
+        }));
+    }
 
     return {
-        imported: true,
-        statementId,
-        transactionsCount: transactions.length,
-        statementYear: period.year,
-        statementMonth: period.month
+        results,
+        importedCount: results.filter(row => row.imported).length,
+        skippedCount: results.filter(row => !row.imported).length,
+        transactionsCount: results.reduce((sum, row) => sum + Number(row.transactionsCount || 0), 0)
     };
 });
 
@@ -615,12 +839,26 @@ ipcMain.handle('add-receipt', async (event, data) => {
         month
     ]);
 
-    createReceipt(
+    const receiptResult = createReceipt(
         data.transactionId,
         storedReceipt.filename,
         storedReceipt.filepath,
         data.filepath
     );
+
+    // V0.23 : toute PJ ajoutée depuis une opération devient aussi visible
+    // dans l'onglet Justificatifs/Documents.
+    createDocumentForReceipt({
+        companyId: data.companyId || null,
+        transactionId: data.transactionId,
+        receiptId: receiptResult.lastInsertRowid,
+        filename: storedReceipt.filename,
+        filepath: storedReceipt.filepath,
+        originalFilepath: data.filepath,
+        detectedAmount: transaction ? Math.abs(transaction.amount) : null,
+        detectedReference: detectReferenceFromFilename(storedReceipt.filename),
+        detectedSupplier: path.basename(storedReceipt.filename, path.extname(storedReceipt.filename)).replace(/[-_]+/g, ' ')
+    });
 
     return true;
 });
@@ -638,6 +876,76 @@ ipcMain.handle('delete-receipt', async (event, receiptId) => {
     }
 
     return result;
+});
+
+
+ipcMain.handle('get-category-rules', async () => {
+    return getCategoryRules();
+});
+
+ipcMain.handle('add-category-rule', async (event, data) => {
+    addCategoryRule(data.keyword, data.category);
+    return true;
+});
+
+ipcMain.handle('bulk-update-transactions', async (event, data) => {
+    return updateTransactionsBulk(data.ids || [], data.updates || {});
+});
+
+ipcMain.handle('select-documents', async () => {
+    const result = await dialog.showOpenDialog({
+        title: 'Importer des documents justificatifs',
+        filters: [
+            { name: 'Documents', extensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'] }
+        ],
+        properties: ['openFile', 'multiSelections']
+    });
+
+    if (result.canceled || result.filePaths.length === 0) return [];
+
+    return result.filePaths.map(filepath => ({ filename: path.basename(filepath), filepath }));
+});
+
+ipcMain.handle('add-documents', async (event, data) => {
+    const files = Array.isArray(data.files) ? data.files : [];
+    const added = [];
+    for (const file of files) {
+        const stored = copyToFocusData(file.filepath, [RECEIPTS_DIR, 'Documents']);
+        const result = createDocument({
+            companyId: data.companyId,
+            filename: stored.filename,
+            filepath: stored.filepath,
+            originalFilepath: file.filepath,
+            detectedAmount: detectAmountFromFilename(file.filename),
+            detectedReference: detectReferenceFromFilename(file.filename),
+            detectedSupplier: path.basename(file.filename, path.extname(file.filename)).replace(/[-_]+/g, ' ')
+        });
+        added.push({ id: result.lastInsertRowid, filename: stored.filename });
+    }
+    return { addedCount: added.length, added };
+});
+
+ipcMain.handle('get-documents', async (event, data) => {
+    return getDocuments(data?.companyId || null, data?.filters || {});
+});
+
+ipcMain.handle('delete-document', async (event, documentId) => {
+    const doc = getDocument(documentId);
+    const ok = deleteDocument(documentId);
+    if (ok && doc) deleteFileIfInsideDataDir(doc.filepath);
+    return ok;
+});
+
+ipcMain.handle('find-document-matches', async (event, data) => {
+    return findDocumentMatches(data.companyId, data.documentId, data.limit || 8);
+});
+
+ipcMain.handle('search-transactions-for-document', async (event, data) => {
+    return searchTransactionsForDocument(data.companyId, data.query || '', data.limit || 25);
+});
+
+ipcMain.handle('link-document-to-transaction', async (event, data) => {
+    return linkDocumentToTransaction(data.documentId, data.transactionId);
 });
 
 ipcMain.handle('open-file', async (event, filepath) => {

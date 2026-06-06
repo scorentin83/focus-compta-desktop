@@ -25,6 +25,7 @@
             <button class="nav-button" data-page="dashboardPage">📊 Tableau de bord</button>
             <button class="nav-button" data-page="bankPage">🏦 Banque</button>
             <button class="nav-button" data-page="receiptsPage">📎 Justificatifs</button>
+            <button class="nav-button" data-page="documentsPage">📂 Documents</button>
             <button class="nav-button" data-page="accountingPage">📚 Comptabilité</button>
             <button class="nav-button" data-page="exportsPage">📤 Exports</button>
             <button class="nav-button" data-page="settingsPage">⚙ Paramètres</button>
@@ -151,18 +152,49 @@
                     <p id="selectedCompanyTitle" class="muted">Aucune société sélectionnée</p>
 
                     <div id="bankSection" style="display:none;">
-                        <h2>Comptes bancaires</h2>
-                        <div class="form-grid compact-form">
-                            <input id="bankName" type="text" placeholder="Banque, ex : Crédit Agricole">
-                            <input id="accountName" type="text" placeholder="Nom du compte">
-                            <input id="iban" type="text" placeholder="IBAN">
-                            <button id="newBankAccount">Ajouter le compte</button>
+                        <div class="section-title-row">
+                            <h2>Comptes bancaires</h2>
+                            <button id="toggleBankForm" class="secondary-button small-button">+ Ajouter</button>
                         </div>
-                        <ul id="bankAccountList" class="nav-list"></ul>
+
+                        <div id="bankAccountList" class="bank-account-cards"></div>
+
+                        <div id="bankAccountForm" class="bank-account-form" style="display:none;">
+                            <h3>Nouveau compte</h3>
+                            <div class="form-grid compact-form">
+                                <input id="bankName" type="text" placeholder="Banque, ex : Crédit Agricole">
+                                <input id="accountName" type="text" placeholder="Nom du compte">
+                                <input id="accountNumber" type="text" placeholder="Numéro de compte">
+                                <input id="iban" type="text" placeholder="IBAN">
+                                <input id="bic" type="text" placeholder="BIC">
+                                <button id="newBankAccount">Ajouter le compte</button>
+                            </div>
+                        </div>
+
+                        <div id="bankAccountEdit" class="bank-account-form" style="display:none;">
+                            <h3>Modifier le compte</h3>
+                            <input id="editBankName" type="text" placeholder="Banque">
+                            <input id="editAccountName" type="text" placeholder="Nom du compte">
+                            <input id="editAccountNumber" type="text" placeholder="Numéro de compte">
+                            <input id="editIban" type="text" placeholder="IBAN">
+                            <input id="editBic" type="text" placeholder="BIC">
+                            <textarea id="editBankNotes" rows="3" placeholder="Notes"></textarea>
+                            <div class="rib-row">
+                                <span id="editRibLabel" class="muted">Aucun RIB enregistré.</span>
+                                <button id="selectRib" class="secondary-button">Ajouter / remplacer le RIB</button>
+                            </div>
+                            <div class="button-row">
+                                <button id="saveBankAccount">Enregistrer</button>
+                                <button id="cancelBankEdit" class="secondary-button">Fermer</button>
+                                <button id="openRib" class="secondary-button">Ouvrir RIB</button>
+                                <button id="deleteBankAccount" class="danger-button">Supprimer</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="statementSidebar" class="statement-sidebar" style="display:none;">
                         <h2>Relevés</h2>
+                        <button id="importStatementSidebar" class="primary-wide">Importer des relevés PDF</button>
                         <label for="statementSelect">Relevé sélectionné</label>
                         <select id="statementSelect">
                             <option value="all">Tous les relevés</option>
@@ -212,17 +244,34 @@
                         <div class="tool-field button-field"><button id="resetFilters">Réinitialiser</button></div>
                     </div>
 
+                    <div id="bulkToolbar" class="bulk-toolbar" style="display:none;">
+                        <strong><span id="bulkCount">0</span> opération(s) sélectionnée(s)</strong>
+                        <select id="bulkCategory"><option value="">Catégorie...</option></select>
+                        <select id="bulkStatus">
+                            <option value="">Statut...</option>
+                            <option value="missing">Justificatif manquant</option>
+                            <option value="attached">Pièce jointe</option>
+                            <option value="verified">Vérifié</option>
+                            <option value="review">À vérifier</option>
+                            <option value="ignored">Ignoré</option>
+                        </select>
+                        <input id="bulkNotes" placeholder="Note à appliquer">
+                        <button id="applyBulkUpdate">Appliquer</button>
+                        <button id="clearSelection" class="secondary-button">Désélectionner</button>
+                    </div>
+
                     <div class="table-wrapper">
                         <table id="transactionTable" class="bank-table" style="display:none;">
                             <thead>
                                 <tr>
+                                    <th><input type="checkbox" id="selectAllTransactions"></th>
                                     <th>Date</th>
                                     <th>Libellé</th>
                                     <th>Montant</th>
                                     <th>Catégorie</th>
                                     <th>Statut</th>
-                                    <th>Justifs</th>
-                                    <th>Relevé</th>
+                                    <th title="Justificatifs">📎</th>
+                                    <th title="Relevé source">📄</th>
                                 </tr>
                             </thead>
                             <tbody id="transactionTableBody"></tbody>
@@ -230,8 +279,11 @@
                     </div>
                 </section>
 
-                <section class="panel detail-panel">
-                    <h2>Détail opération</h2>
+                <section class="panel detail-panel" id="detailPanel">
+                    <div class="detail-panel-header">
+                        <h2>Détail opération</h2>
+                        <button id="closeDetailPanel" class="icon-button drawer-close" title="Fermer">×</button>
+                    </div>
                     <div id="transactionDetailEmpty" class="empty-state">Sélectionne une opération pour la pointer ou ajouter un justificatif.</div>
                     <div id="transactionDetail" style="display:none;">
                         <div class="detail-block"><span class="muted">Date</span><strong id="detailDate"></strong></div>
@@ -247,7 +299,7 @@
                             <option value="ignored">Ignoré</option>
                         </select>
                         <label>Catégorie</label>
-                        <input id="detailCategory" type="text" placeholder="Ex : Fournisseur, Frais bancaires, Apport CCA">
+                        <select id="detailCategory"><option value="">Non catégorisé</option></select>
                         <label>Notes</label>
                         <textarea id="detailNotes" rows="4" placeholder="Note interne pour le pointage ou l'expert-comptable"></textarea>
                         <div class="button-row">
@@ -263,8 +315,47 @@
         </section>
 
         <section id="receiptsPage" class="page-section">
-            <div class="topbar"><div><h1>Justificatifs</h1><p>Retrouvez les pièces jointes et les opérations restant à justifier.</p></div></div>
-            <div class="panel clean-panel"><p class="muted">La vue avancée des justificatifs arrivera dans une prochaine version. Pour l'instant, les justificatifs se gèrent depuis la page Banque.</p></div>
+            <div class="topbar">
+                <div><h1>Documents / Justificatifs</h1><p>Importez vos factures, retrouvez les pièces non rapprochées et associez-les aux opérations.</p></div>
+                <button id="importDocuments">Importer des factures / PJ</button>
+            </div>
+            <div class="documents-layout">
+                <section class="panel">
+                    <div class="section-title-row">
+                        <h2>Documents</h2>
+                        <select id="documentStatusFilter">
+                            <option value="all">Tous</option>
+                            <option value="unmatched">À rapprocher</option>
+                            <option value="matched">Rapprochés</option>
+                            <option value="ignored">Ignorés</option>
+                        </select>
+                    </div>
+                    <input id="documentSearch" type="text" placeholder="Rechercher un document, fournisseur, facture...">
+                    <p id="documentStatsV023" class="muted document-stats-v023">0 document</p>
+                    <div id="documentList" class="document-list"></div>
+                </section>
+                <section class="panel">
+                    <h2>Opérations sans PJ</h2>
+                    <p class="muted">Depuis la Banque, filtre le statut “Manquant” pour traiter les opérations sans justificatif. Le rattachement manuel ci-dessous permet de relier une PJ à l’opération choisie.</p>
+                    <div id="unlinkedOperationsV023" class="empty-state">Vue consolidée complète prévue avec le prochain tableau documentaire.</div>
+                </section>
+                <section class="panel">
+                    <h2>Suggestions / rattachement manuel</h2>
+                    <p id="documentMatchHelp" class="muted">Sélectionne un document pour voir les opérations proposées.</p>
+                    <div id="documentMatchList" class="document-match-list"></div>
+                </section>
+            </div>
+        </section>
+
+        <section id="documentsPage" class="page-section">
+            <div class="topbar">
+                <div><h1>Documents</h1><p>Retrouvez les PJ rapprochées, à rapprocher et orphelines.</p></div>
+                <button class="nav-shortcut" data-page="receiptsPage">Ouvrir Justificatifs</button>
+            </div>
+            <div class="panel clean-panel">
+                <h2>Module Documents</h2>
+                <p class="muted">Le module Documents utilise la même base que Justificatifs. Ouvre l’onglet Justificatifs pour importer, rechercher et rattacher manuellement les documents.</p>
+            </div>
         </section>
 
         <section id="accountingPage" class="page-section">
@@ -285,6 +376,15 @@
             <div class="panel clean-panel button-row">
                 <button id="openDataFolderSettings">Ouvrir FocusComptaData</button>
                 <button id="createBackupSettings">Créer une sauvegarde locale</button>
+            </div>
+            <div class="panel clean-panel">
+                <h2>Catégories automatiques</h2>
+                <div class="form-grid compact-form">
+                    <input id="categoryKeyword" placeholder="Mot clé, ex : EDF">
+                    <input id="categoryName" placeholder="Catégorie, ex : Électricité">
+                    <button id="addCategoryRule">Ajouter / mettre à jour</button>
+                </div>
+                <ul id="categoryRulesList" class="mini-list"></ul>
             </div>
         </section>
 

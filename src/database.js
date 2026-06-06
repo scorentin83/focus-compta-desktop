@@ -6,11 +6,12 @@ const PROJECT_ROOT = path.join(__dirname, '..');
 const DATA_DIR = path.join(PROJECT_ROOT, 'FocusComptaData');
 const STATEMENTS_DIR = path.join(DATA_DIR, 'Releves');
 const RECEIPTS_DIR = path.join(DATA_DIR, 'Justificatifs');
+const RIB_DIR = path.join(DATA_DIR, 'RIB');
 const BACKUPS_DIR = path.join(PROJECT_ROOT, 'FocusComptaBackups');
 const LEGACY_DB_PATH = path.join(PROJECT_ROOT, 'ThetaCompta.db');
 const DB_PATH = path.join(DATA_DIR, 'FocusCompta.db');
 
-[DATA_DIR, STATEMENTS_DIR, RECEIPTS_DIR, BACKUPS_DIR].forEach(dir => {
+[DATA_DIR, STATEMENTS_DIR, RECEIPTS_DIR, RIB_DIR, BACKUPS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -35,6 +36,11 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
     bank_name TEXT NOT NULL,
     account_name TEXT,
     iban TEXT,
+    bic TEXT,
+    account_number TEXT,
+    rib_path TEXT,
+    rib_original_path TEXT,
+    notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(company_id) REFERENCES companies(id)
 );
@@ -84,6 +90,22 @@ CREATE TABLE IF NOT EXISTS category_rules (
     category TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER,
+    filename TEXT NOT NULL,
+    filepath TEXT NOT NULL,
+    original_filepath TEXT,
+    detected_amount REAL,
+    detected_reference TEXT,
+    detected_supplier TEXT,
+    linked_transaction_id INTEGER,
+    status TEXT DEFAULT 'unmatched',
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(company_id) REFERENCES companies(id),
+    FOREIGN KEY(linked_transaction_id) REFERENCES bank_transactions(id) ON DELETE SET NULL
+);
 `);
 
 function ensureColumn(tableName, columnName, definition) {
@@ -122,12 +144,24 @@ function buildTransactionSearchText(row) {
 ensureColumn('statements', 'statement_year', 'TEXT');
 ensureColumn('statements', 'statement_month', 'TEXT');
 ensureColumn('statements', 'original_filepath', 'TEXT');
+ensureColumn('statements', 'old_balance', 'REAL');
+ensureColumn('statements', 'new_balance', 'REAL');
+ensureColumn('statements', 'balance_type', 'TEXT');
+ensureColumn('statements', 'report_json', 'TEXT');
 ensureColumn('bank_transactions', 'statement_id', 'INTEGER');
 ensureColumn('bank_transactions', 'status', "TEXT DEFAULT 'missing'");
 ensureColumn('bank_transactions', 'category', 'TEXT');
 ensureColumn('bank_transactions', 'notes', 'TEXT');
 ensureColumn('bank_transactions', 'search_text', 'TEXT');
 ensureColumn('receipts', 'original_filepath', 'TEXT');
+ensureColumn('bank_accounts', 'bic', 'TEXT');
+ensureColumn('bank_accounts', 'account_number', 'TEXT');
+ensureColumn('bank_accounts', 'rib_path', 'TEXT');
+ensureColumn('bank_accounts', 'rib_original_path', 'TEXT');
+ensureColumn('bank_accounts', 'notes', 'TEXT');
+ensureColumn('documents', 'source_type', "TEXT DEFAULT 'document'");
+ensureColumn('documents', 'source_receipt_id', 'INTEGER');
+
 
 const transactionsMissingSearchText = db.prepare(`
     SELECT id, label, category, notes, pdf_source, amount
@@ -206,11 +240,87 @@ function getCompanies() {
     `).all();
 }
 
-function createBankAccount(companyId, bankName, accountName, iban) {
+function createBankAccount(dataOrCompanyId, bankNameArg = '', accountNameArg = '', ibanArg = '') {
+    const data = typeof dataOrCompanyId === 'object'
+        ? dataOrCompanyId
+        : {
+            companyId: dataOrCompanyId,
+            bankName: bankNameArg,
+            accountName: accountNameArg,
+            iban: ibanArg
+        };
+
     return db.prepare(`
-        INSERT INTO bank_accounts(company_id, bank_name, account_name, iban)
-        VALUES(?, ?, ?, ?)
-    `).run(companyId, bankName, accountName, iban);
+        INSERT INTO bank_accounts(
+            company_id,
+            bank_name,
+            account_name,
+            iban,
+            bic,
+            account_number,
+            rib_path,
+            rib_original_path,
+            notes
+        )
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        data.companyId,
+        data.bankName,
+        data.accountName || '',
+        data.iban || '',
+        data.bic || '',
+        data.accountNumber || data.account_number || '',
+        data.ribPath || data.rib_path || '',
+        data.ribOriginalPath || data.rib_original_path || '',
+        data.notes || ''
+    );
+}
+
+function updateBankAccount(data) {
+    return db.prepare(`
+        UPDATE bank_accounts
+        SET bank_name = ?,
+            account_name = ?,
+            iban = ?,
+            bic = ?,
+            account_number = ?,
+            rib_path = COALESCE(?, rib_path),
+            rib_original_path = COALESCE(?, rib_original_path),
+            notes = ?
+        WHERE id = ?
+    `).run(
+        data.bankName,
+        data.accountName || '',
+        data.iban || '',
+        data.bic || '',
+        data.accountNumber || '',
+        data.ribPath || null,
+        data.ribOriginalPath || null,
+        data.notes || '',
+        data.id
+    );
+}
+
+function deleteBankAccount(bankAccountId) {
+    const linked = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM statements
+        WHERE bank_account_id = ?
+    `).get(bankAccountId).count;
+
+    if (linked > 0) {
+        return {
+            deleted: false,
+            message: 'Impossible de supprimer ce compte : des relevés sont déjà liés.'
+        };
+    }
+
+    db.prepare(`DELETE FROM bank_accounts WHERE id = ?`).run(bankAccountId);
+
+    return {
+        deleted: true,
+        message: 'Compte bancaire supprimé.'
+    };
 }
 
 function getBankAccounts(companyId) {
@@ -673,11 +783,253 @@ function getCategoryRules() {
     `).all();
 }
 
+function updateStatementFinancials(statementId, data = {}) {
+    return db.prepare(`
+        UPDATE statements
+        SET old_balance = ?,
+            new_balance = ?,
+            balance_type = ?,
+            report_json = ?
+        WHERE id = ?
+    `).run(
+        data.oldBalance ?? null,
+        data.newBalance ?? null,
+        data.balanceType || '',
+        data.reportJson || '',
+        statementId
+    );
+}
+
+function addCategoryRule(keyword, category) {
+    return db.prepare(`
+        INSERT INTO category_rules(keyword, category)
+        VALUES(?, ?)
+        ON CONFLICT(keyword) DO UPDATE SET category = excluded.category
+    `).run(keyword, category);
+}
+
+function updateTransactionsBulk(ids = [], data = {}) {
+    const cleanIds = ids.map(id => Number(id)).filter(Boolean);
+    if (cleanIds.length === 0) return { updated: 0 };
+
+    const tx = db.transaction(() => {
+        cleanIds.forEach(id => {
+            if (data.status) {
+                db.prepare(`UPDATE bank_transactions SET status = ? WHERE id = ?`).run(data.status, id);
+            }
+            if (data.category !== undefined || data.notes !== undefined) {
+                const row = db.prepare(`SELECT * FROM bank_transactions WHERE id = ?`).get(id);
+                if (row) {
+                    const category = data.category !== undefined ? data.category : row.category;
+                    const notes = data.notes !== undefined ? data.notes : row.notes;
+                    db.prepare(`UPDATE bank_transactions SET category = ?, notes = ?, search_text = ? WHERE id = ?`).run(
+                        category || '', notes || '', buildTransactionSearchText({...row, category, notes}), id
+                    );
+                }
+            }
+        });
+    });
+    tx();
+    return { updated: cleanIds.length };
+}
+
+
+function createDocumentForReceipt(data) {
+    const existing = db.prepare(`
+        SELECT id
+        FROM documents
+        WHERE source_receipt_id = ?
+        OR filepath = ?
+        LIMIT 1
+    `).get(data.receiptId || -1, data.filepath);
+
+    if (existing) {
+        db.prepare(`
+            UPDATE documents
+            SET linked_transaction_id = ?,
+                status = 'matched',
+                company_id = COALESCE(company_id, ?),
+                source_type = 'receipt',
+                source_receipt_id = COALESCE(source_receipt_id, ?)
+            WHERE id = ?
+        `).run(data.transactionId, data.companyId || null, data.receiptId || null, existing.id);
+        return { lastInsertRowid: existing.id, changes: 1 };
+    }
+
+    return db.prepare(`
+        INSERT INTO documents(
+            company_id,
+            filename,
+            filepath,
+            original_filepath,
+            detected_amount,
+            detected_reference,
+            detected_supplier,
+            linked_transaction_id,
+            status,
+            source_type,
+            source_receipt_id
+        )
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'matched', 'receipt', ?)
+    `).run(
+        data.companyId || null,
+        data.filename,
+        data.filepath,
+        data.originalFilepath || null,
+        data.detectedAmount ?? null,
+        data.detectedReference || '',
+        data.detectedSupplier || '',
+        data.transactionId,
+        data.receiptId || null
+    );
+}
+
+function searchTransactionsForDocument(companyId, query = '', limit = 25) {
+    const q = normalizeSearchText(query);
+    const tokens = q.split(' ').filter(t => t.length >= 2).slice(0, 6);
+
+    const where = [`ba.company_id = ?`];
+    const params = [companyId];
+
+    if (tokens.length) {
+        where.push(tokens.map(() => `t.search_text LIKE ?`).join(' AND '));
+        tokens.forEach(token => params.push(`%${token}%`));
+    }
+
+    params.push(Math.max(1, Math.min(Number(limit) || 25, 100)));
+
+    return db.prepare(`
+        SELECT
+            t.*,
+            s.filename AS statement_filename,
+            s.statement_year,
+            s.statement_month,
+            COUNT(r.id) AS receipts_count
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN statements s ON s.id = t.statement_id
+        LEFT JOIN receipts r ON r.transaction_id = t.id
+        WHERE ${where.join(' AND ')}
+        GROUP BY t.id
+        ORDER BY
+            CASE WHEN COUNT(r.id) = 0 THEN 0 ELSE 1 END,
+            ABS(t.amount) DESC,
+            t.id DESC
+        LIMIT ?
+    `).all(...params);
+}
+
+function createDocument(data) {
+    return db.prepare(`
+        INSERT INTO documents(company_id, filename, filepath, original_filepath, detected_amount, detected_reference, detected_supplier, status)
+        VALUES(?, ?, ?, ?, ?, ?, ?, 'unmatched')
+    `).run(
+        data.companyId || null,
+        data.filename,
+        data.filepath,
+        data.originalFilepath || null,
+        data.detectedAmount ?? null,
+        data.detectedReference || '',
+        data.detectedSupplier || ''
+    );
+}
+
+function getDocuments(companyId = null, filters = {}) {
+    const where = [];
+    const params = [];
+    if (companyId) { where.push('d.company_id = ?'); params.push(companyId); }
+    if (filters.status && filters.status !== 'all') { where.push('d.status = ?'); params.push(filters.status); }
+    if (filters.search) {
+        where.push(`(LOWER(d.filename) LIKE ? OR LOWER(COALESCE(d.detected_reference,'')) LIKE ? OR LOWER(COALESCE(d.detected_supplier,'')) LIKE ?)`);
+        const q = `%${String(filters.search).toLowerCase()}%`;
+        params.push(q,q,q);
+    }
+    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return db.prepare(`
+        SELECT d.*, t.date_operation, t.label AS transaction_label, t.amount AS transaction_amount
+        FROM documents d
+        LEFT JOIN bank_transactions t ON t.id = d.linked_transaction_id
+        ${sqlWhere}
+        ORDER BY d.added_at DESC
+    `).all(...params);
+}
+
+function getDocument(documentId) {
+    return db.prepare(`SELECT * FROM documents WHERE id = ?`).get(documentId);
+}
+
+function deleteDocument(documentId) {
+    const doc = getDocument(documentId);
+    if (!doc) return false;
+    db.prepare(`DELETE FROM documents WHERE id = ?`).run(documentId);
+    return true;
+}
+
+function linkDocumentToTransaction(documentId, transactionId) {
+    const doc = getDocument(documentId);
+    const tx = getTransaction(transactionId);
+    if (!doc || !tx) return { ok: false };
+
+    const dbTx = db.transaction(() => {
+        db.prepare(`UPDATE documents SET linked_transaction_id = ?, status = 'matched' WHERE id = ?`).run(transactionId, documentId);
+
+        const existingReceipt = db.prepare(`
+            SELECT id
+            FROM receipts
+            WHERE transaction_id = ?
+            AND filepath = ?
+            LIMIT 1
+        `).get(transactionId, doc.filepath);
+
+        if (!existingReceipt) {
+            db.prepare(`INSERT INTO receipts(transaction_id, filename, filepath, original_filepath) VALUES(?, ?, ?, ?)`).run(
+                transactionId, doc.filename, doc.filepath, doc.original_filepath || doc.filepath
+            );
+        }
+
+        db.prepare(`UPDATE bank_transactions SET status = CASE WHEN status = 'verified' THEN status ELSE 'attached' END WHERE id = ?`).run(transactionId);
+    });
+    dbTx();
+    return { ok: true };
+}
+
+function findDocumentMatches(companyId, documentId, limit = 8) {
+    const doc = getDocument(documentId);
+    if (!doc) return [];
+    const tokens = normalizeSearchText([doc.filename, doc.detected_reference, doc.detected_supplier].join(' '))
+        .split(' ').filter(t => t.length >= 3);
+
+    const rows = db.prepare(`
+        SELECT t.*, s.filename AS statement_filename, ba.company_id, COUNT(r.id) AS receipts_count
+        FROM bank_transactions t
+        LEFT JOIN statements s ON s.id = t.statement_id
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN receipts r ON r.transaction_id = t.id
+        WHERE ba.company_id = ?
+        GROUP BY t.id
+        ORDER BY t.id DESC
+        LIMIT 1000
+    `).all(companyId);
+
+    const amount = Number(doc.detected_amount || 0);
+    const scored = rows.map(row => {
+        const haystack = normalizeSearchText([row.label, row.category, row.notes].join(' '));
+        let score = 0;
+        tokens.forEach(token => { if (haystack.includes(token)) score += token.length >= 5 ? 8 : 3; });
+        if (amount > 0 && Math.abs(Math.abs(Number(row.amount)) - amount) < 0.01) score += 50;
+        if ((row.receipts_count || 0) === 0) score += 10;
+        return { ...row, match_score: score };
+    }).filter(r => r.match_score > 0);
+    scored.sort((a,b)=>b.match_score-a.match_score);
+    return scored.slice(0, limit);
+}
+
 module.exports = {
     db,
     DATA_DIR,
     STATEMENTS_DIR,
     RECEIPTS_DIR,
+    RIB_DIR,
     BACKUPS_DIR,
     DB_PATH,
 
@@ -685,10 +1037,13 @@ module.exports = {
     getCompanies,
 
     createBankAccount,
+    updateBankAccount,
+    deleteBankAccount,
     getBankAccounts,
 
     createStatement,
     updateStatementPeriod,
+    updateStatementFinancials,
     getStatements,
     statementExists,
     getStatementFiles,
@@ -704,6 +1059,17 @@ module.exports = {
     getDashboardInsights,
     findReceiptMatches,
     getCategoryRules,
+    addCategoryRule,
+    updateTransactionsBulk,
+
+    createDocument,
+    createDocumentForReceipt,
+    getDocuments,
+    getDocument,
+    deleteDocument,
+    linkDocumentToTransaction,
+    findDocumentMatches,
+    searchTransactionsForDocument,
 
     createReceipt,
     getReceipt,
