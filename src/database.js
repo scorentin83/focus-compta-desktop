@@ -13,4 +13,27 @@ CREATE TABLE IF NOT EXISTS companies (
 );
 `);
 
-module.exports = db;
+function createCompany(name) {
+    const stmt = db.prepare(`
+        INSERT INTO companies(name)
+        VALUES(?)
+    `);
+
+    return stmt.run(name);
+}
+
+function getCompanies() {
+    const stmt = db.prepare(`
+        SELECT *
+        FROM companies
+        ORDER BY name
+    `);
+
+    return stmt.all();
+}
+
+module.exports = {
+    db,
+    createCompany,
+    getCompanies
+};
