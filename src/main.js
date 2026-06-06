@@ -45,11 +45,196 @@ const {
     linkDocumentToTransaction,
     findDocumentMatches,
     searchTransactionsForDocument,
+    getThirdParties,
+    backfillThirdParties,
+    updateTransactionThirdParty,
+    getDocumentsDashboard,
+    updateThirdParty,
+    mergeThirdParties,
+    cleanupThirdParties,
+    renameDocument,
+    moveDocumentToTrash,
+    restoreDocument,
+    deleteDocumentPermanently,
+    updateDocumentType,
+    moveDocumentToFolder,
+    getDocumentTree,
+    toggleDocumentFavorite,
+    updateDocumentTags,
+    getDocumentDuplicates,
+    getDocumentSmartFolders,
+    toggleDocumentImportant,
+    updateDocumentThirdParty,
+    getDocumentHistory,
+    createAutomationRule,
+    getAutomationRules,
+    deleteAutomationRule,
+    applyAutomationRules,
     createReceipt,
     getReceipt,
     getReceipts,
-    deleteReceipt
+    deleteReceipt,
+    createCashSheet,
+    getCashSheets,
+    getCashSheetInsights,
+    getCompanyDashboard,
+    getCashSheetReminders
 } = require('./database');
+
+
+function parseNumberV038(value) {
+    if (value === null || value === undefined) return 0;
+    const clean = String(value)
+        .replace(/\s/g, '')
+        .replace(/[€]/g, '')
+        .replace(',', '.')
+        .replace(/[^0-9.-]/g, '');
+    const n = Number(clean);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function detectDateV038(text) {
+    const match = String(text || '').match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](20\d{2})\b/);
+    if (!match) {
+        const now = new Date();
+        return {
+            sheetDate: now.toISOString().slice(0, 10),
+            year: String(now.getFullYear()),
+            month: String(now.getMonth() + 1).padStart(2, '0')
+        };
+    }
+    return {
+        sheetDate: `${match[3]}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`,
+        year: match[3],
+        month: String(match[2]).padStart(2, '0')
+    };
+}
+
+async function readCashSheetTextV039(filepath) {
+    const ext = path.extname(filepath).toLowerCase();
+
+    if (ext === '.pdf') {
+        try {
+            const buffer = fs.readFileSync(filepath);
+            const parser = new PDFParse({ data: buffer });
+            const parsed = await parser.getText();
+            return parsed.text || '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    try {
+        return fs.readFileSync(filepath, 'utf8');
+    } catch (error) {
+        return '';
+    }
+}
+
+function findAmountAfterLabelV039(text, label, occurrence = 1) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`${escaped}[^\\n\\r]*?(-?\\d[\\d\\s.,]*\\d|-?\\d)`, 'gi');
+    let match;
+    let count = 0;
+    while ((match = regex.exec(text)) !== null) {
+        count += 1;
+        if (count === occurrence) return parseNumberV038(match[1]);
+    }
+    return 0;
+}
+
+function parseCashLineAmountV039(lines, label, columnIndexFromEnd = 1) {
+    const normalizedLabel = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (const line of lines) {
+        const normalized = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        if (normalized.includes(normalizedLabel)) {
+            const nums = line.match(/-?\d[\d\s.,]*\d|-?\d/g) || [];
+            if (nums.length) return parseNumberV038(nums[Math.max(0, nums.length - columnIndexFromEnd)]);
+        }
+    }
+    return 0;
+}
+
+async function parseCashSheetFileV038(filepath) {
+    const ext = path.extname(filepath).toLowerCase();
+    const text = await readCashSheetTextV039(filepath);
+
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const full = text || path.basename(filepath);
+    const date = detectDateV038(full);
+
+    const grossCaHt = findAmountAfterLabelV039(full, 'CA total facturé', 1);
+    const discountHt = findAmountAfterLabelV039(full, 'CA total facturé', 3);
+    const netCaHt = Math.max(0, grossCaHt - discountHt);
+    const netCaTtc = netCaHt ? netCaHt * 1.2 : findAmountAfterLabelV039(full, 'CA total facturé', 5);
+    const tvaTotal = netCaTtc - netCaHt;
+
+    const cashTotal = parseCashLineAmountV039(lines, 'Espèces', 2) || parseCashLineAmountV039(lines, 'Espèces', 1);
+    const cardTotal = parseCashLineAmountV039(lines, 'Carte Bleue', 2) || parseCashLineAmountV039(lines, 'Carte Bleue', 1);
+    const checkTotal = parseCashLineAmountV039(lines, 'Chèques', 2) || parseCashLineAmountV039(lines, 'Chèques', 1);
+    const transferTotal = parseCashLineAmountV039(lines, 'Virement', 1);
+
+    const p3xTotal = parseCashLineAmountV039(lines, 'P3X', 2) || parseCashLineAmountV039(lines, 'P3X', 1);
+    const p4xTotal = parseCashLineAmountV039(lines, 'P4X', 2) || parseCashLineAmountV039(lines, 'P4X', 1);
+    const p10xTotal = parseCashLineAmountV039(lines, 'P10X', 2) || parseCashLineAmountV039(lines, 'P10X', 1);
+    const paylaterTotal = parseCashLineAmountV039(lines, 'Paylater', 2) || parseCashLineAmountV039(lines, 'Paylater', 1);
+
+    const tiersPayant = findAmountAfterLabelV039(full, 'Tiers payant', 1);
+    const acompteTotal = findAmountAfterLabelV039(full, 'Acomptes', 1) || findAmountAfterLabelV039(full, "Reprises d\'acomptes", 1);
+    const ecartTotal = Math.abs(findAmountAfterLabelV039(full, 'Total écarts justifiés', 1)) || Math.abs(parseCashLineAmountV039(lines, 'Total', 1));
+
+    let invoicedCa = netCaTtc || findAmountAfterLabelV039(full, 'CA total facturé', 5);
+
+    // Fallback if the source is not text-readable.
+    if (!invoicedCa) {
+        const allNumbers = lines.flatMap(line => line.match(/-?\d[\d\s.,]*\d|-?\d/g) || []).map(parseNumberV038).filter(n => Math.abs(n) > 0);
+        invoicedCa = allNumbers.reduce((sum, n) => sum + (n > 0 ? n : 0), 0);
+    }
+
+    return {
+        sheetDate: date.sheetDate,
+        periodYear: date.year,
+        periodMonth: date.month,
+        invoicedCa,
+        grossCaHt,
+        discountHt,
+        netCaHt,
+        netCaTtc: invoicedCa,
+        tvaTotal,
+        tiersPayant,
+        acompteTotal,
+        p3xTotal,
+        p4xTotal,
+        p10xTotal,
+        paylaterTotal,
+        ecartTotal,
+        cashTotal,
+        cardTotal,
+        checkTotal,
+        transferTotal,
+        totalRows: lines.length,
+        raw: { ext, preview: lines.slice(0, 50) }
+    };
+}
+
+function yearMonthFromDetectedDateV0393(detectedDate) {
+    const value = String(detectedDate || '');
+    let match = value.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](20\d{2})\b/);
+    if (match) return { year: match[3], month: String(match[2]).padStart(2, '0') };
+    match = value.match(/\b(20\d{2})[\/.-](\d{1,2})[\/.-](\d{1,2})\b/);
+    if (match) return { year: match[1], month: String(match[2]).padStart(2, '0') };
+    return { year: String(new Date().getFullYear()), month: String(new Date().getMonth() + 1).padStart(2, '0') };
+}
+
+function fileHashV0373(filepath) {
+    try {
+        const crypto = require('crypto');
+        const buffer = fs.readFileSync(filepath);
+        return crypto.createHash('sha256').update(buffer).digest('hex');
+    } catch (error) {
+        return '';
+    }
+}
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -375,8 +560,164 @@ function detectReferenceFromFilename(filename) {
     return match ? match[0].replace(/[_\s]+/g, '-') : '';
 }
 
+
+function normalizeDocumentText(value) {
+    return String(value || '')
+        .replace(/\r/g, '\n')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function parseFrenchAmountStrict(value) {
+    const cleaned = String(value || '')
+        .replace(/[^\d,.\s-]/g, '')
+        .replace(/\s/g, '')
+        .replace(',', '.');
+
+    const amount = Number(cleaned);
+    return Number.isFinite(amount) ? amount : null;
+}
+
+function extractAmountFromDocumentText(text, filename) {
+    const clean = normalizeDocumentText(text);
+    const priorityPatterns = [
+        /(?:net\s+a\s+payer|net\s+à\s+payer|total\s+ttc|montant\s+ttc|ttc\s+à\s+payer|total\s+facture)[^\d]{0,40}(\d[\d\s]*[,.]\d{2})/i,
+        /(\d[\d\s]*[,.]\d{2})\s*(?:€|eur|euro)/i
+    ];
+
+    for (const pattern of priorityPatterns) {
+        const match = clean.match(pattern);
+        if (match) {
+            const amount = parseFrenchAmountStrict(match[1]);
+            if (amount && amount > 0) return amount;
+        }
+    }
+
+    const candidates = [...clean.matchAll(/\b(\d[\d\s]{0,12}[,.]\d{2})\b/g)]
+        .map(match => parseFrenchAmountStrict(match[1]))
+        .filter(amount => amount && amount > 0 && amount < 10000000);
+
+    if (candidates.length > 0) {
+        return Math.max(...candidates);
+    }
+
+    return detectAmountFromFilename(filename);
+}
+
+function extractDateFromDocumentText(text, filename) {
+    const clean = normalizeDocumentText(text);
+
+    const direct = clean.match(/\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/);
+    if (direct) return direct[1].replace(/[.-]/g, '/');
+
+    const filenameDate = String(filename || '').match(/\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/);
+    if (filenameDate) return filenameDate[1].replace(/[.-]/g, '/');
+
+    return '';
+}
+
+function extractReferenceFromDocumentText(text, filename) {
+    const clean = normalizeDocumentText(text);
+
+    const patterns = [
+        /(?:facture|invoice|n[°o]\s*facture|réf(?:érence)?|ref(?:erence)?)[^\w]{0,12}([A-Z0-9][A-Z0-9._/-]{2,})/i,
+        /\b(F(?:AC|ACTURE)?[-_\s]?\d{2,}[-_\s]?\d*)\b/i,
+        /\b([A-Z]{1,4}\d{2,}[-_/]?\d*)\b/
+    ];
+
+    for (const pattern of patterns) {
+        const match = clean.match(pattern);
+        if (match) return match[1].replace(/\s+/g, '-');
+    }
+
+    return detectReferenceFromFilename(filename);
+}
+
+function extractSupplierFromDocumentText(text, filename) {
+    const lines = normalizeDocumentText(text)
+        .split(/\n/)
+        .map(line => line.trim())
+        .filter(line => line.length >= 3 && line.length <= 80);
+
+    const noise = [
+        /facture/i,
+        /invoice/i,
+        /date/i,
+        /total/i,
+        /tva/i,
+        /siret/i,
+        /iban/i,
+        /bic/i,
+        /page\s+\d+/i
+    ];
+
+    const candidate = lines.find(line => !noise.some(pattern => pattern.test(line)));
+    if (candidate) return candidate.slice(0, 80);
+
+    return path.basename(filename, path.extname(filename)).replace(/[-_]+/g, ' ').slice(0, 80);
+}
+
+async function extractTextFromDocument(filepath) {
+    const ext = path.extname(filepath).toLowerCase();
+
+    if (ext === '.pdf') {
+        try {
+            const buffer = fs.readFileSync(filepath);
+            const parser = new PDFParse({ data: buffer });
+            const parsed = await parser.getText();
+            return parsed.text || '';
+        } catch (error) {
+            console.warn('Extraction texte PDF impossible :', filepath, error.message);
+            return '';
+        }
+    }
+
+    // V0.24 : les images sont stockées et préparées pour OCR complet.
+    // L'extraction OCR image sera activable ensuite avec Tesseract si nécessaire.
+    return '';
+}
+
+async function analyzeDocument(filepath, filename) {
+    const text = await extractTextFromDocument(filepath);
+
+    return {
+        detectedAmount: extractAmountFromDocumentText(text, filename),
+        detectedReference: extractReferenceFromDocumentText(text, filename),
+        detectedSupplier: extractSupplierFromDocumentText(text, filename),
+        detectedDate: extractDateFromDocumentText(text, filename),
+        extractedText: text
+    };
+}
+
+
+
+function extractAccountIdentifiers(statementText, filename = '') {
+    const content = `${statementText}\n${filename}`;
+
+    const ccou = content.match(/CCOU[-\s]?(\d{6,})/i);
+    const account = content.match(/(?:compte\s*n?[°o]?\s*|n°\s*)(\d{8,})/i);
+    const iban = content.match(/FR\d{2}[A-Z0-9\s]{10,}/i);
+
+    return {
+        statementIdentifier: ccou ? `CCOU-${ccou[1]}` : '',
+        accountNumber: account ? account[1] : '',
+        iban: iban ? iban[0].replace(/\s+/g,'') : ''
+    };
+}
+
 function processStatementPdf(data) {
     return (async () => {
+        if (!data.bankAccountId) {
+            return {
+                imported: false,
+                unresolved: true,
+                message: 'Compte bancaire non identifié',
+                transactionsCount: 0,
+                filename: data.filename
+            };
+        }
+
         const existing = statementExists(data.bankAccountId, data.filepath);
 
         if (existing) {
@@ -393,6 +734,7 @@ function processStatementPdf(data) {
         const parsed = await parser.getText();
         const period = extractStatementPeriod(parsed.text, data.filename);
         const balances = extractStatementBalances(parsed.text);
+        const identifiers = extractAccountIdentifiers(parsed.text, data.filename);
 
         const storedStatement = copyToFocusData(data.filepath, [
             STATEMENTS_DIR,
@@ -426,6 +768,12 @@ function processStatementPdf(data) {
             balanceType: balances.balanceType,
             reportJson: JSON.stringify(importReport)
         });
+
+        try {
+            backfillThirdParties();
+        } catch (error) {
+            console.warn('Backfill tiers impossible :', error.message);
+        }
 
         return {
             imported: true,
@@ -719,19 +1067,117 @@ ipcMain.handle('add-statements-bulk', async (event, data) => {
     const files = Array.isArray(data.files) ? data.files : [];
     const results = [];
 
+    // V0.25.1 :
+    // - En import multi-PDF, on route chaque relevé vers le bon compte.
+    // - Le compte actuellement affiché ne doit jamais forcer toute la sélection.
+    // - Si aucun compte n'est reconnu, le PDF est ignoré avec statut unresolved.
+    const allCompanies = getCompanies();
+    const allAccounts = allCompanies.flatMap(company =>
+        getBankAccounts(company.id).map(account => ({ ...account, company_name: company.name }))
+    );
+
+    function compact(value) {
+        return String(value || '').replace(/\s+/g, '').toUpperCase();
+    }
+
+    function accountMatchesIdentifiers(account, ids) {
+        const accountIban = compact(account.iban);
+        const accountNumber = compact(account.account_number);
+        const identifiers = compact(account.statement_identifiers);
+
+        return (
+            (ids.iban && accountIban && accountIban === compact(ids.iban)) ||
+            (ids.accountNumber && accountNumber && accountNumber === compact(ids.accountNumber)) ||
+            (ids.accountNumber && identifiers && identifiers.includes(compact(ids.accountNumber))) ||
+            (ids.statementIdentifier && identifiers && identifiers.includes(compact(ids.statementIdentifier))) ||
+            (ids.statementIdentifier && accountNumber && compact(ids.statementIdentifier).includes(accountNumber))
+        );
+    }
+
     for (const file of files) {
-        results.push(await processStatementPdf({
-            bankAccountId: data.bankAccountId,
+        let bankAccountId = null;
+        let matchedAccount = null;
+        let identifiers = {};
+
+        try {
+            const buffer = fs.readFileSync(file.filepath);
+            const parser = new PDFParse({ data: buffer });
+            const parsed = await parser.getText();
+            identifiers = extractAccountIdentifiers(parsed.text, file.filename);
+
+            const matches = allAccounts.filter(account => accountMatchesIdentifiers(account, identifiers));
+
+            if (matches.length === 1) {
+                matchedAccount = matches[0];
+                bankAccountId = matchedAccount.id;
+            } else if (matches.length > 1) {
+                results.push({
+                    imported: false,
+                    unresolved: true,
+                    ambiguous: true,
+                    message: 'Plusieurs comptes possibles',
+                    transactionsCount: 0,
+                    filename: file.filename,
+                    identifiers,
+                    matches: matches.map(acc => ({
+                        id: acc.id,
+                        companyName: acc.company_name,
+                        bankName: acc.bank_name,
+                        accountName: acc.account_name,
+                        accountNumber: acc.account_number
+                    }))
+                });
+                continue;
+            }
+        } catch (error) {
+            results.push({
+                imported: false,
+                unresolved: true,
+                message: `Analyse impossible : ${error.message}`,
+                transactionsCount: 0,
+                filename: file.filename
+            });
+            continue;
+        }
+
+        if (!bankAccountId) {
+            results.push({
+                imported: false,
+                unresolved: true,
+                message: 'Compte bancaire non identifié',
+                transactionsCount: 0,
+                filename: file.filename,
+                identifiers
+            });
+            continue;
+        }
+
+        const result = await processStatementPdf({
+            bankAccountId,
             filename: file.filename,
             filepath: file.filepath
-        }));
+        });
+
+        result.assignedBankAccountId = bankAccountId;
+        result.assignedBankAccountLabel = matchedAccount
+            ? `${matchedAccount.company_name} — ${matchedAccount.bank_name}${matchedAccount.account_name ? ' — ' + matchedAccount.account_name : ''}`
+            : '';
+
+        results.push(result);
     }
 
     return {
         results,
         importedCount: results.filter(row => row.imported).length,
-        skippedCount: results.filter(row => !row.imported).length,
-        transactionsCount: results.reduce((sum, row) => sum + Number(row.transactionsCount || 0), 0)
+        skippedCount: results.filter(row => !row.imported && !row.unresolved).length,
+        unresolvedCount: results.filter(row => row.unresolved).length,
+        transactionsCount: results.reduce((sum, row) => sum + Number(row.transactionsCount || 0), 0),
+        byAccount: results
+            .filter(row => row.imported && row.assignedBankAccountLabel)
+            .reduce((acc, row) => {
+                acc[row.assignedBankAccountLabel] = (acc[row.assignedBankAccountLabel] || 0) + 1;
+                return acc;
+            }, {})
     };
 });
 
@@ -791,7 +1237,7 @@ ipcMain.handle('get-dashboard-insights', async (event, data) => {
 
 ipcMain.handle('select-smart-receipt', async (event, bankAccountId) => {
     const result = await dialog.showOpenDialog({
-        title: 'Pointer automatiquement un justificatif',
+        title: 'Pointer un justificatif',
         filters: [
             { name: 'Documents', extensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'] }
         ],
@@ -804,9 +1250,17 @@ ipcMain.handle('select-smart-receipt', async (event, bankAccountId) => {
 
     const filepath = result.filePaths[0];
     const filename = path.basename(filepath);
-    const matches = findReceiptMatches(bankAccountId, filename, 5);
+    const analysis = await analyzeDocument(filepath, filename);
+    let matches = findReceiptMatches(bankAccountId, filename, 12);
 
-    return { filename, filepath, matches };
+    if (analysis.detectedAmount) {
+        const amount = Math.abs(Number(analysis.detectedAmount));
+        matches = matches
+            .map(match => ({ ...match, amount_delta: Math.abs(Math.abs(Number(match.amount || 0)) - amount) }))
+            .sort((a, b) => (a.amount_delta || 999999) - (b.amount_delta || 999999));
+    }
+
+    return { filename, filepath, analysis, matches };
 });
 
 ipcMain.handle('select-receipt', async () => {
@@ -830,11 +1284,14 @@ ipcMain.handle('select-receipt', async () => {
 
 ipcMain.handle('add-receipt', async (event, data) => {
     const transaction = getTransaction(data.transactionId);
-    const year = transaction?.statement_year || 'SansAnnee';
-    const month = transaction?.statement_month || 'SansMois';
+    const analysis = data.analysis || await analyzeDocument(data.filepath, data.filename || path.basename(data.filepath));
+    const period = yearMonthFromDetectedDateV0393(analysis.detectedDate);
+    const year = period.year || transaction?.statement_year || 'SansAnnee';
+    const month = period.month || transaction?.statement_month || 'SansMois';
 
     const storedReceipt = copyToFocusData(data.filepath, [
         RECEIPTS_DIR,
+        'JUSTIFICATIFS',
         year,
         month
     ]);
@@ -846,8 +1303,6 @@ ipcMain.handle('add-receipt', async (event, data) => {
         data.filepath
     );
 
-    // V0.23 : toute PJ ajoutée depuis une opération devient aussi visible
-    // dans l'onglet Justificatifs/Documents.
     createDocumentForReceipt({
         companyId: data.companyId || null,
         transactionId: data.transactionId,
@@ -855,9 +1310,11 @@ ipcMain.handle('add-receipt', async (event, data) => {
         filename: storedReceipt.filename,
         filepath: storedReceipt.filepath,
         originalFilepath: data.filepath,
-        detectedAmount: transaction ? Math.abs(transaction.amount) : null,
-        detectedReference: detectReferenceFromFilename(storedReceipt.filename),
-        detectedSupplier: path.basename(storedReceipt.filename, path.extname(storedReceipt.filename)).replace(/[-_]+/g, ' ')
+        detectedAmount: analysis.detectedAmount || (transaction ? Math.abs(transaction.amount) : null),
+        detectedReference: analysis.detectedReference || detectReferenceFromFilename(storedReceipt.filename),
+        detectedSupplier: analysis.detectedSupplier || path.basename(storedReceipt.filename, path.extname(storedReceipt.filename)).replace(/[-_]+/g, ' '),
+        detectedDate: analysis.detectedDate || '',
+        folderPath: `JUSTIFICATIFS/${year}/${month}`
     });
 
     return true;
@@ -892,6 +1349,61 @@ ipcMain.handle('bulk-update-transactions', async (event, data) => {
     return updateTransactionsBulk(data.ids || [], data.updates || {});
 });
 
+
+ipcMain.handle('select-cash-sheets', async () => {
+    const result = await dialog.showOpenDialog({
+        title: 'Importer des feuilles de caisse',
+        filters: [
+            { name: 'Feuilles de caisse', extensions: ['csv', 'txt', 'pdf', 'xlsx', 'xls'] },
+            { name: 'Tous les fichiers', extensions: ['*'] }
+        ],
+        properties: ['openFile', 'multiSelections']
+    });
+
+    if (result.canceled || result.filePaths.length === 0) return [];
+    return result.filePaths.map(filepath => ({ filename: path.basename(filepath), filepath }));
+});
+
+ipcMain.handle('import-cash-sheets', async (event, data) => {
+    const files = Array.isArray(data.files) ? data.files : [];
+    const companyId = data.companyId || null;
+    const imported = [];
+    const errors = [];
+
+    for (const file of files) {
+        try {
+            const parsed = await parseCashSheetFileV038(file.filepath);
+            const stored = copyToFocusData(file.filepath, [DATA_DIR, 'CashSheets', String(companyId || 'no-company'), parsed.periodYear || 'SansAnnee']);
+
+            const result = createCashSheet({
+                companyId,
+                filename: stored.filename,
+                filepath: stored.filepath,
+                originalFilepath: file.filepath,
+                ...parsed
+            });
+
+            imported.push({ id: result.lastInsertRowid, filename: stored.filename, ...parsed });
+        } catch (error) {
+            errors.push({ filename: file.filename || path.basename(file.filepath), message: error.message });
+        }
+    }
+
+    return { importedCount: imported.length, errorCount: errors.length, imported, errors };
+});
+
+ipcMain.handle('get-cash-sheet-insights', async (event, data) => {
+    return getCashSheetInsights(data?.companyId || null);
+});
+
+ipcMain.handle('get-cash-sheet-reminders', async () => {
+    return getCashSheetReminders();
+});
+
+ipcMain.handle('get-company-dashboard', async (event, companyId) => {
+    return getCompanyDashboard(companyId);
+});
+
 ipcMain.handle('select-documents', async () => {
     const result = await dialog.showOpenDialog({
         title: 'Importer des documents justificatifs',
@@ -909,20 +1421,44 @@ ipcMain.handle('select-documents', async () => {
 ipcMain.handle('add-documents', async (event, data) => {
     const files = Array.isArray(data.files) ? data.files : [];
     const added = [];
+    const duplicates = [];
+
     for (const file of files) {
-        const stored = copyToFocusData(file.filepath, [RECEIPTS_DIR, 'Documents']);
+        const analysis = await analyzeDocument(file.filepath, file.filename);
+        const period = yearMonthFromDetectedDateV0393(analysis.detectedDate);
+        const year = period.year;
+        const month = period.month;
+        const hash = fileHashV0373(file.filepath);
+
+        const stored = copyToFocusData(file.filepath, [RECEIPTS_DIR, 'Documents', year, month]);
+
         const result = createDocument({
             companyId: data.companyId,
             filename: stored.filename,
             filepath: stored.filepath,
             originalFilepath: file.filepath,
-            detectedAmount: detectAmountFromFilename(file.filename),
-            detectedReference: detectReferenceFromFilename(file.filename),
-            detectedSupplier: path.basename(file.filename, path.extname(file.filename)).replace(/[-_]+/g, ' ')
+            detectedAmount: analysis.detectedAmount,
+            detectedReference: analysis.detectedReference,
+            detectedSupplier: analysis.detectedSupplier,
+            detectedDate: analysis.detectedDate,
+            folderPath: data.companyName ? `${data.companyName}/JUSTIFICATIFS/${year}/${month}` : `JUSTIFICATIFS/${year}/${month}`,
+            docType: data.docType || 'facture',
+            fileHash: hash
         });
-        added.push({ id: result.lastInsertRowid, filename: stored.filename });
+
+        if (result.duplicate) {
+            duplicates.push({
+                incoming: file.filename,
+                existingId: result.existing.id,
+                existingFilename: result.existing.filename
+            });
+            try { deleteFileIfInsideDataDir(stored.filepath); } catch (error) {}
+        } else {
+            added.push({ id: result.lastInsertRowid, filename: stored.filename });
+        }
     }
-    return { addedCount: added.length, added };
+
+    return { addedCount: added.length, duplicateCount: duplicates.length, added, duplicates };
 });
 
 ipcMain.handle('get-documents', async (event, data) => {
@@ -930,10 +1466,8 @@ ipcMain.handle('get-documents', async (event, data) => {
 });
 
 ipcMain.handle('delete-document', async (event, documentId) => {
-    const doc = getDocument(documentId);
-    const ok = deleteDocument(documentId);
-    if (ok && doc) deleteFileIfInsideDataDir(doc.filepath);
-    return ok;
+    // V0.32 : suppression douce vers la corbeille, le fichier reste récupérable.
+    return deleteDocument(documentId);
 });
 
 ipcMain.handle('find-document-matches', async (event, data) => {
@@ -946,6 +1480,127 @@ ipcMain.handle('search-transactions-for-document', async (event, data) => {
 
 ipcMain.handle('link-document-to-transaction', async (event, data) => {
     return linkDocumentToTransaction(data.documentId, data.transactionId);
+});
+
+
+ipcMain.handle('get-third-parties', async (event, data) => {
+    return getThirdParties(data?.companyId || null);
+});
+
+ipcMain.handle('backfill-third-parties', async (event, data) => {
+    return backfillThirdParties(data?.companyId || null);
+});
+
+ipcMain.handle('update-transaction-third-party', async (event, data) => {
+    return updateTransactionThirdParty(data.transactionId, data.thirdPartyName, data.type || 'autre');
+});
+
+ipcMain.handle('get-documents-dashboard', async (event, data) => {
+    return getDocumentsDashboard(data?.companyId || null);
+});
+
+ipcMain.handle('rename-document', async (event, data) => {
+    return renameDocument(data.documentId, data.newFilename);
+});
+
+ipcMain.handle('get-document-tree', async (event, data) => {
+    return getDocumentTree(data?.companyId || null);
+});
+
+
+ipcMain.handle('toggle-document-favorite', async (event, documentId) => {
+    return toggleDocumentFavorite(documentId);
+});
+
+ipcMain.handle('update-document-tags', async (event, data) => {
+    return updateDocumentTags(data.documentId, data.tags || '');
+});
+
+ipcMain.handle('get-document-duplicates', async (event, data) => {
+    return getDocumentDuplicates(data?.companyId || null);
+});
+
+ipcMain.handle('get-document-smart-folders', async (event, data) => {
+    return getDocumentSmartFolders(data?.companyId || null);
+});
+
+
+ipcMain.handle('toggle-document-important', async (event, documentId) => {
+    return toggleDocumentImportant(documentId);
+});
+
+ipcMain.handle('update-document-third-party', async (event, data) => {
+    return updateDocumentThirdParty(data.documentId, data.thirdPartyName || '');
+});
+
+ipcMain.handle('get-document-history', async (event, documentId) => {
+    return getDocumentHistory(documentId);
+});
+
+
+
+ipcMain.handle('restore-document', async (event, documentId) => {
+    return restoreDocument(documentId);
+});
+
+ipcMain.handle('delete-document-permanently', async (event, documentId) => {
+    const doc = getDocument(documentId);
+    const ok = deleteDocumentPermanently(documentId);
+    if (ok && doc) deleteFileIfInsideDataDir(doc.filepath);
+    return ok;
+});
+
+ipcMain.handle('update-document-type', async (event, data) => {
+    return updateDocumentType(data.documentId, data.docType);
+});
+
+ipcMain.handle('move-document-folder', async (event, data) => {
+    return moveDocumentToFolder(data.documentId, data.folderPath);
+});
+
+
+ipcMain.handle('move-document', async (event, data) => {
+    const company = safeDirNameV032(data.companyName || 'Société inconnue');
+    let folderPath = '';
+
+    if (data.docType === 'rib') {
+        folderPath = `${company}/RIB`;
+    } else if (data.docType === 'releve') {
+        folderPath = `${company}/Relevés/${data.year || 'SansAnnee'}/${safeDirNameV032(data.accountName || 'Compte')}/${data.month || 'SansMois'}`;
+    } else {
+        folderPath = `${company}/Documents/${data.year || 'SansAnnee'}/${data.month || 'SansMois'}`;
+    }
+
+    return moveDocumentToFolder(data.documentId, folderPath);
+});
+
+
+ipcMain.handle('update-third-party', async (event, data) => {
+    return updateThirdParty(data.thirdPartyId, data.name, data.type || 'autre', data.notes || '');
+});
+
+ipcMain.handle('merge-third-parties', async (event, data) => {
+    return mergeThirdParties(data.sourceId, data.targetId);
+});
+
+ipcMain.handle('cleanup-third-parties', async (event, data) => {
+    return cleanupThirdParties(data?.companyId || null);
+});
+
+ipcMain.handle('create-automation-rule', async (event, data) => {
+    return createAutomationRule(data);
+});
+
+ipcMain.handle('get-automation-rules', async (event, data) => {
+    return getAutomationRules(data?.companyId || null);
+});
+
+ipcMain.handle('delete-automation-rule', async (event, ruleId) => {
+    return deleteAutomationRule(ruleId);
+});
+
+ipcMain.handle('apply-automation-rules', async (event, data) => {
+    return applyAutomationRules(data?.companyId || null);
 });
 
 ipcMain.handle('open-file', async (event, filepath) => {

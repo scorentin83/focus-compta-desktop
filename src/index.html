@@ -24,8 +24,9 @@
             <button class="nav-button" data-page="companiesPage">🏢 Sociétés</button>
             <button class="nav-button" data-page="dashboardPage">📊 Tableau de bord</button>
             <button class="nav-button" data-page="bankPage">🏦 Banque</button>
-            <button class="nav-button" data-page="receiptsPage">📎 Justificatifs</button>
-            <button class="nav-button" data-page="documentsPage">📂 Documents</button>
+            <button class="nav-button" data-page="receiptsPage">📁 Documents</button>
+            <button class="nav-button" data-page="matchingPage">🔗 Rapprochements</button>
+            <button class="nav-button" data-page="thirdPartiesPage">👤 Tiers</button>
             <button class="nav-button" data-page="accountingPage">📚 Comptabilité</button>
             <button class="nav-button" data-page="exportsPage">📤 Exports</button>
             <button class="nav-button" data-page="settingsPage">⚙ Paramètres</button>
@@ -43,13 +44,11 @@
             <div class="topbar">
                 <div>
                     <h1>Bonjour Corentin 👋</h1>
-                    <p>Voici la synthèse de vos sociétés et de la pré-comptabilité.</p>
+                    <p>Accueil global. La création et la gestion des sociétés se font dans le menu Sociétés.</p>
                 </div>
-                <button id="homeAddCompany">+ Ajouter une société</button>
+                
             </div>
-
-            <h2>Mes sociétés</h2>
-            <div id="homeCompanyCards" class="company-card-grid"></div>
+<div id="cashSheetReminderPanel" class="cash-reminder-panel-v039" style="display:none;"></div>
 
             <div class="section-title-row">
                 <h2>Insights globaux</h2>
@@ -104,24 +103,40 @@
             <div class="topbar">
                 <div>
                     <h1 id="dashboardTitle">Tableau de bord</h1>
-                    <p id="dashboardSubtitle">Sélectionnez une société et un compte bancaire pour afficher les indicateurs.</p>
+                    <p id="dashboardSubtitle">Sélectionnez une société pour afficher son tableau de bord complet.</p>
                 </div>
-                <button class="nav-shortcut" data-page="bankPage">Aller à la banque</button>
+                <div class="button-row"><button id="importCashSheets">Importer feuilles de caisse</button><button class="nav-shortcut" data-page="bankPage">Aller à la banque</button></div>
             </div>
 
             <div id="dashboardAccountSummary" class="summary-cards" style="display:none;">
+                <div class="summary-card treasury"><span>Trésorerie</span><strong id="dashboardTreasuryTotal">0 €</strong></div>
                 <div class="summary-card"><span>Opérations</span><strong id="dashboardTotalOps">0</strong></div>
                 <div class="summary-card success"><span>Justifiées</span><strong id="dashboardVerifiedOps">0</strong></div>
                 <div class="summary-card danger"><span>Manquantes</span><strong id="dashboardMissingOps">0</strong></div>
-                <div class="summary-card"><span>Crédits</span><strong id="dashboardCreditTotal">0 €</strong></div>
-                <div class="summary-card"><span>Débits</span><strong id="dashboardDebitTotal">0 €</strong></div>
+                <div class="summary-card"><span>Encaissements</span><strong id="dashboardCreditTotal">0 €</strong></div>
+                <div class="summary-card"><span>Décaissements</span><strong id="dashboardDebitTotal">0 €</strong></div>
+                <div class="summary-card"><span>CA facturé</span><strong id="dashboardCashCa">0 €</strong></div>
             </div>
 
-            <div id="dashboardPanel" class="dashboard-panel" style="display:none;">
+            <div id="dashboardPanel" class="dashboard-panel company-dashboard-panel-v038" style="display:none;">
                 <div class="dashboard-box">
                     <h3>À justifier</h3>
                     <strong id="dashboardMissingAmount">0 €</strong>
                     <span id="dashboardMissingCount" class="muted">0 opération</span>
+                </div>
+                <div class="dashboard-box">
+                    <h3>Comptes bancaires</h3>
+                    <ul id="dashboardAccounts" class="mini-list"></ul>
+                </div>
+                <div class="dashboard-box">
+                    <h3>Feuilles de caisse</h3>
+                    <strong id="dashboardCashSheetsCount">0</strong>
+                    <span id="dashboardCashPaymentMix" class="muted">Aucune donnée importée.</span>
+                    <ul id="dashboardCashMonths" class="mini-list"></ul>
+                </div>
+                <div class="dashboard-box dashboard-wide-v039">
+                    <h3>Performance annuelle</h3>
+                    <div id="dashboardCaTrend" class="cash-chart-v039"></div>
                 </div>
                 <div class="dashboard-box">
                     <h3>Dépenses par catégorie</h3>
@@ -140,9 +155,9 @@
                     <h1>Banque</h1>
                     <p>Importez les relevés, pointez les opérations et ajoutez les justificatifs.</p>
                 </div>
-                <div id="statementSection" class="statement-actions" style="display:none;">
-                    <button id="smartReceipt">Pointer PJ</button>
-                    <button id="importStatement">Importer un relevé PDF</button>
+                <div class="statement-actions">
+                    <button id="smartReceipt" style="display:none;">Pointer PJ</button>
+                    <button id="importStatement">Importer des relevés PDF</button>
                 </div>
             </div>
 
@@ -150,6 +165,7 @@
                 <section class="panel sidebar-panel">
                     <h2>Société sélectionnée</h2>
                     <p id="selectedCompanyTitle" class="muted">Aucune société sélectionnée</p>
+                    <p id="bankImportHintV0251" class="muted import-hint-v0251">Tu peux importer plusieurs relevés : Focus Compta les affectera automatiquement au bon compte.</p>
 
                     <div id="bankSection" style="display:none;">
                         <div class="section-title-row">
@@ -315,46 +331,127 @@
         </section>
 
         <section id="receiptsPage" class="page-section">
-            <div class="topbar">
-                <div><h1>Documents / Justificatifs</h1><p>Importez vos factures, retrouvez les pièces non rapprochées et associez-les aux opérations.</p></div>
-                <button id="importDocuments">Importer des factures / PJ</button>
+            <div class="topbar documents-topbar-v033">
+                <div>
+                    <h1>Documents</h1>
+                    <p>GED Focus Compta : classement, aperçu PDF, recherche, non classés et corbeille.</p>
+                </div>
+                <div class="button-row">
+                    <button id="newDocumentFolderV033" class="secondary-button">Nouveau dossier</button>
+                    <button id="showUnclassifiedV034" class="secondary-button">Non classés</button>
+                    <button id="showTrashV034" class="secondary-button">Corbeille</button>
+                    <button id="importDocuments">Importer des documents</button>
+                </div>
             </div>
-            <div class="documents-layout">
-                <section class="panel">
+
+            <div class="document-kpis-v033">
+                <article><span>Total documents</span><strong id="docsKpiTotalV033">0</strong></article>
+                <article><span>Relevés</span><strong id="docsKpiStatementsV033">0</strong></article>
+                <article><span>Documents</span><strong id="docsKpiDocsV033">0</strong></article>
+                <article><span>RIB</span><strong id="docsKpiRibV033">0</strong></article>
+                <article><span>Contrats</span><strong id="docsKpiContractsV033">0</strong></article>
+            </div>
+
+            <div class="document-toolbar-v033">
+                <input id="documentSearch" type="text" placeholder="Rechercher un document...">
+                <select id="documentTypeFilter">
+                    <option value="all">Type : Tous</option>
+                    <option value="facture">Factures</option>
+                    <option value="avoir">Avoirs</option>
+                    <option value="releve">Relevés</option>
+                    <option value="contrat">Contrats</option>
+                    <option value="rib">RIB</option>
+                    <option value="divers">Divers</option>
+                </select>
+                <select id="documentYearFilterV033">
+                    <option value="all">Année : Toutes</option>
+                </select>
+                <button id="refreshDocumentTreeV033" class="secondary-button">Actualiser</button>
+            </div>
+
+            <div id="documentSmartFoldersV035" class="document-smart-folders-v035">
+                <button data-smart-folder="favorites">⭐ Favoris <span id="smartFavCountV035">0</span></button>
+                <button data-smart-folder="unclassified">📥 Non classés <span id="smartUnclassifiedCountV035">0</span></button>
+                <button data-smart-folder="duplicates">⚠️ Doublons <span id="smartDuplicatesCountV035">0</span></button>
+                <button data-smart-folder="unmatched">🔗 À rapprocher <span id="smartUnmatchedCountV035">0</span></button>
+                <button data-smart-folder="contracts">📑 Contrats <span id="smartContractsCountV035">0</span></button>
+                <button data-smart-folder="recent">🕒 Récents</button>
+            </div>
+
+            <div class="documents-dropbox-v033">
+                <aside class="panel document-tree-panel-v033">
                     <div class="section-title-row">
-                        <h2>Documents</h2>
-                        <select id="documentStatusFilter">
-                            <option value="all">Tous</option>
-                            <option value="unmatched">À rapprocher</option>
-                            <option value="matched">Rapprochés</option>
-                            <option value="ignored">Ignorés</option>
-                        </select>
+                        <h2>Arborescence</h2>
                     </div>
-                    <input id="documentSearch" type="text" placeholder="Rechercher un document, fournisseur, facture...">
-                    <p id="documentStatsV023" class="muted document-stats-v023">0 document</p>
-                    <div id="documentList" class="document-list"></div>
+                    <input id="documentTreeSearchV036" class="tree-search-v036" placeholder="Rechercher dossier...">
+                    <div id="documentTreeV033" class="document-tree-v033"></div>
+                    <div class="storage-v033">
+                        <span>Espace utilisé : GED locale</span>
+                        <div><span></span></div>
+                    </div>
+                </aside>
+
+                <section class="panel document-files-panel-v033">
+                    <div class="document-breadcrumb-v033" id="documentBreadcrumbV033">Tous les documents</div>
+                    <div id="documentFolderFilesV033" class="document-table-v033"></div>
+                    <div class="document-bottom-actions-v033">
+                        <button id="openSelectedDocumentV033">Ouvrir</button>
+                        <button id="previewSelectedDocumentV033">Aperçu</button>
+                        <button id="renameSelectedDocumentV033">Renommer</button>
+                        <button id="moveSelectedDocumentV033">Déplacer</button>
+                        <button id="favoriteSelectedDocumentV035">Favori</button>
+                        <button id="importantSelectedDocumentV037">Important</button>
+                        <button id="downloadSelectedDocumentV033">Télécharger</button>
+                        <button id="deleteSelectedDocumentV033" class="danger-button">Supprimer</button>
+                    </div>
+                </section>
+
+                <aside class="panel document-preview-panel-v033">
+                    <div class="section-title-row">
+                        <h2 id="documentPreviewTitleV033">Aperçu</h2>
+                        <button id="closeDocumentPreviewV033" class="secondary-button small-button">×</button>
+                    </div>
+                    <div class="document-preview-tabs-v033">
+                        <button class="active" data-preview-tab="preview">Aperçu</button>
+                        <button data-preview-tab="info">Informations</button>
+                        <button data-preview-tab="ocr">OCR</button>
+                        <button data-preview-tab="links">Liens</button>
+                    </div>
+                    <div id="documentPreviewV033" class="document-preview-v033 empty-state">Sélectionne un document.</div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="matchingPage" class="page-section">
+            <div class="topbar">
+                <div><h1>Rapprochements</h1><p>Traitez rapidement les documents non rapprochés avec les meilleures suggestions.</p></div>
+                <button id="matchingRefresh">Actualiser</button>
+            </div>
+            <div class="matching-layout-v030">
+                <section class="panel">
+                    <h2>Documents à rapprocher</h2>
+                    <div id="matchingDocumentList" class="document-list compact-document-list-v030"></div>
                 </section>
                 <section class="panel">
-                    <h2>Opérations sans PJ</h2>
-                    <p class="muted">Depuis la Banque, filtre le statut “Manquant” pour traiter les opérations sans justificatif. Le rattachement manuel ci-dessous permet de relier une PJ à l’opération choisie.</p>
-                    <div id="unlinkedOperationsV023" class="empty-state">Vue consolidée complète prévue avec le prochain tableau documentaire.</div>
+                    <h2>Suggestions</h2>
+                    <p id="matchingHelp" class="muted">Sélectionne un document à gauche.</p>
+                    <div id="matchingSuggestionList" class="document-match-list"></div>
                 </section>
                 <section class="panel">
-                    <h2>Suggestions / rattachement manuel</h2>
-                    <p id="documentMatchHelp" class="muted">Sélectionne un document pour voir les opérations proposées.</p>
-                    <div id="documentMatchList" class="document-match-list"></div>
+                    <h2>Aperçu / informations</h2>
+                    <div id="matchingPreview" class="empty-state">Aucun document sélectionné.</div>
                 </section>
             </div>
         </section>
 
-        <section id="documentsPage" class="page-section">
+        <section id="thirdPartiesPage" class="page-section">
             <div class="topbar">
-                <div><h1>Documents</h1><p>Retrouvez les PJ rapprochées, à rapprocher et orphelines.</p></div>
-                <button class="nav-shortcut" data-page="receiptsPage">Ouvrir Justificatifs</button>
+                <div><h1>Tiers</h1><p>Analysez les fournisseurs, clients, banques et organismes détectés dans les opérations.</p></div>
+                <button id="refreshThirdParties">Mettre à jour les tiers</button>
             </div>
             <div class="panel clean-panel">
-                <h2>Module Documents</h2>
-                <p class="muted">Le module Documents utilise la même base que Justificatifs. Ouvre l’onglet Justificatifs pour importer, rechercher et rattacher manuellement les documents.</p>
+                <div id="thirdPartiesSummary" class="muted">Sélectionne une société pour voir les tiers.</div>
+                <div id="thirdPartiesList" class="third-party-grid-v030"></div>
             </div>
         </section>
 
@@ -386,11 +483,72 @@
                 </div>
                 <ul id="categoryRulesList" class="mini-list"></ul>
             </div>
+
+            <div class="panel clean-panel">
+                <h2>Automatisations</h2>
+                <p class="muted">Exemple : si le nom du compte contient “Tiers-Payant”, alors catégorie = Tiers-payant et statut = Vérifié.</p>
+                <div class="form-grid compact-form">
+                    <input id="automationKeywordV031" placeholder="Mot clé compte/libellé, ex : Tiers-Payant">
+                    <input id="automationCategoryV031" placeholder="Catégorie, ex : Tiers-payant">
+                    <select id="automationStatusV031">
+                        <option value="">Statut...</option>
+                        <option value="verified">Vérifié</option>
+                        <option value="attached">Pièce jointe</option>
+                        <option value="missing">Manquant</option>
+                        <option value="review">À vérifier</option>
+                        <option value="ignored">Ignoré</option>
+                    </select>
+                    <button id="addAutomationRuleV031">Ajouter règle</button>
+                    <button id="applyAutomationRulesV031">Appliquer maintenant</button>
+                </div>
+                <ul id="automationRulesListV031" class="mini-list"></ul>
+            </div>
         </section>
 
     </main>
 </div>
 
 <script src="renderer.js"></script>
+
+    <div id="documentContextMenuV037" class="context-menu-v037" style="display:none;"></div>
+
+    <div id="receiptMatchModalV0393" class="match-modal-v0393" style="display:none;">
+        <div class="match-modal-card-v0393">
+            <div class="match-modal-header-v0393">
+                <div>
+                    <h2>Pointer un justificatif</h2>
+                    <p id="matchModalSubtitleV0393"></p>
+                </div>
+                <button id="closeMatchModalV0393">×</button>
+            </div>
+            <div class="match-modal-body-v0393">
+                <section>
+                    <h3>Justificatif</h3>
+                    <div id="matchReceiptInfoV0393" class="match-receipt-info-v0393"></div>
+                    <iframe id="matchReceiptPreviewV0393" class="match-preview-v0393"></iframe>
+                </section>
+                <section>
+                    <h3>Opérations proposées</h3>
+                    <div id="matchOperationsV0393" class="match-operations-v0393"></div>
+                    <div class="match-modal-actions-v0393">
+                        <button id="confirmMatchV0393">Associer</button>
+                        <button id="cancelMatchV0393" class="secondary-button">Annuler</button>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="inputModalV0397" class="input-modal-v0397" style="display:none;">
+        <div class="input-modal-card-v0397">
+            <h2 id="inputModalTitleV0397">Saisie</h2>
+            <label id="inputModalLabelV0397" for="inputModalFieldV0397"></label>
+            <input id="inputModalFieldV0397" type="text">
+            <div class="button-row">
+                <button id="inputModalOkV0397">Valider</button>
+                <button id="inputModalCancelV0397" class="secondary-button">Annuler</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

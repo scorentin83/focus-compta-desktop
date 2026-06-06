@@ -1116,3 +1116,1508 @@ body.sidebar-collapsed .main-sidebar .sidebar-footer {
         width: min(340px, 90vw) !important;
     }
 }
+
+/* Focus Compta V0.24 - OCR documents */
+.document-card small {
+    color: #475569;
+}
+
+.document-card .document-card-main span:nth-child(3) {
+    font-weight: 700;
+}
+
+
+/* ===========================
+   Focus Compta V0.30 - Refonte workflow
+   =========================== */
+
+.matching-layout-v030 {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(420px, 1fr) minmax(260px, 360px);
+    gap: 20px;
+    align-items: start;
+}
+
+.compact-document-list-v030 {
+    max-height: calc(100vh - 260px);
+    overflow-y: auto;
+}
+
+.matching-doc-v030 {
+    cursor: pointer;
+    transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+
+.matching-doc-v030:hover {
+    transform: translateY(-1px);
+    border-color: #93c5fd;
+    background: #f8fbff;
+}
+
+.matching-doc-v030.selected {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.third-party-grid-v030 {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 18px;
+}
+
+.third-party-card-v030 {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.third-party-card-v030 strong {
+    color: #0f172a;
+    font-size: 16px;
+}
+
+.third-party-card-v030 span {
+    color: #475569;
+    font-size: 13px;
+}
+
+.third-party-amounts-v030 {
+    display: grid;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+}
+
+#documentTypeFilter {
+    min-width: 130px;
+}
+
+@media (max-width: 1350px) {
+    .matching-layout-v030 {
+        grid-template-columns: minmax(250px, 310px) 1fr;
+    }
+
+    .matching-layout-v030 > section:nth-child(3) {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 900px) {
+    .matching-layout-v030 {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Focus Compta V0.31 - correctifs workflow */
+.document-card .button-row {
+    flex-wrap: wrap;
+}
+
+.third-party-card-v030 .button-row {
+    margin-top: 8px;
+}
+
+.mini-list button {
+    margin-left: 10px;
+    font-size: 12px;
+    padding: 6px 10px;
+}
+
+.transaction-check {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* Focus Compta V0.32 - GED Documents */
+.documents-kpi-v032 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 18px 0;
+}
+
+.documents-kpi-v032 article {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.documents-kpi-v032 strong {
+    display: block;
+    font-size: 28px;
+    color: #0f172a;
+}
+
+.documents-kpi-v032 span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.documents-tabs-v032,
+.documents-filters-v032 {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 14px 0;
+}
+
+.document-tab-v032 {
+    border: 1px solid #dbeafe;
+    background: #fff;
+    border-radius: 999px;
+    padding: 9px 14px;
+    cursor: pointer;
+}
+
+.document-tab-v032.active {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+}
+
+.documents-view-v032 { display: none; }
+.documents-view-v032.active { display: block; }
+
+.documents-workbench-v032 {
+    display: grid;
+    grid-template-columns: minmax(520px, 1.4fr) minmax(320px, .9fr) minmax(280px, .7fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.documents-explorer-v032 {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(520px, 1fr) minmax(280px, 360px);
+    gap: 18px;
+    align-items: start;
+}
+
+.document-tree-v032 {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: calc(100vh - 310px);
+    overflow: auto;
+}
+
+.folder-button-v032 {
+    text-align: left;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.folder-button-v032:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+}
+
+.document-table-v032 {
+    overflow: auto;
+    max-width: 100%;
+}
+
+.documents-table-v032 {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 980px;
+    font-size: 13px;
+}
+
+.documents-table-v032 th,
+.documents-table-v032 td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 10px;
+    vertical-align: top;
+}
+
+.documents-table-v032 th {
+    text-align: left;
+    color: #475569;
+    background: #f8fafc;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.document-row-v032 {
+    cursor: pointer;
+}
+
+.document-row-v032:hover {
+    background: #f8fbff;
+}
+
+.document-actions-v032 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 280px;
+}
+
+.document-actions-v032 button {
+    padding: 6px 8px;
+    border-radius: 9px;
+    font-size: 12px;
+}
+
+.document-preview-v032 {
+    min-height: 260px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    padding: 16px;
+    background: #f8fafc;
+    color: #475569;
+}
+
+.document-preview-v032 img {
+    max-width: 100%;
+    max-height: 360px;
+    object-fit: contain;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.document-preview-header-v032 {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+    color: #0f172a;
+}
+
+.pdf-preview-v032 {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+.document-properties-v032 p {
+    margin: 6px 0;
+}
+
+@media (max-width: 1500px) {
+    .documents-workbench-v032,
+    .documents-explorer-v032 {
+        grid-template-columns: 1fr;
+    }
+
+    .documents-kpi-v032 {
+        grid-template-columns: repeat(2, minmax(0,1fr));
+    }
+}
+
+@media (max-width: 800px) {
+    .documents-kpi-v032 {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ===========================
+   Focus Compta V0.33 - Documents Mini Dropbox
+   =========================== */
+
+.documents-topbar-v033 {
+    align-items: flex-start;
+    gap: 18px;
+}
+
+.document-kpis-v033 {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    margin: 18px 0 12px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 8px 26px rgba(15, 23, 42, .05);
+    overflow: hidden;
+}
+
+.document-kpis-v033 article {
+    padding: 16px 22px;
+    border-right: 1px solid #e2e8f0;
+}
+
+.document-kpis-v033 article:last-child {
+    border-right: 0;
+}
+
+.document-kpis-v033 span {
+    display: block;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.document-kpis-v033 strong {
+    display: block;
+    color: #0f172a;
+    font-size: 26px;
+    line-height: 1.1;
+    margin-bottom: 4px;
+}
+
+.document-toolbar-v033 {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 180px 180px auto;
+    gap: 12px;
+    align-items: center;
+    margin: 10px 0;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+}
+
+.documents-dropbox-v033 {
+    display: grid;
+    grid-template-columns: 310px minmax(560px, 1fr) 390px;
+    gap: 0;
+    min-height: calc(100vh - 290px);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 10px 32px rgba(15, 23, 42, .05);
+}
+
+.documents-dropbox-v033 > .panel {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+}
+
+.document-tree-panel-v033 {
+    border-right: 1px solid #e2e8f0 !important;
+    padding: 16px !important;
+}
+
+.document-files-panel-v033 {
+    border-right: 1px solid #e2e8f0 !important;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.document-preview-panel-v033 {
+    padding: 16px !important;
+    min-width: 0;
+}
+
+.document-tree-v033 {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: calc(100vh - 380px);
+    overflow-y: auto;
+}
+
+.document-tree-v033 button {
+    text-align: left;
+    border: 0;
+    background: transparent;
+    border-radius: 10px;
+    padding: 9px 10px;
+    cursor: pointer;
+    color: #334155;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.document-tree-v033 button:hover,
+.document-tree-v033 button.active {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.storage-v033 {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.storage-v033 div {
+    height: 6px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.storage-v033 div span {
+    display: block;
+    width: 2%;
+    height: 100%;
+    background: #3b82f6;
+}
+
+.document-breadcrumb-v033 {
+    padding: 14px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #475569;
+    font-weight: 700;
+    background: #f8fafc;
+}
+
+.document-table-v033 {
+    overflow: auto;
+    flex: 1;
+}
+
+.documents-table-v033 {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+}
+
+.documents-table-v033 th,
+.documents-table-v033 td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #edf2f7;
+    text-align: left;
+    vertical-align: middle;
+    color: #334155;
+}
+
+.documents-table-v033 th {
+    font-size: 12px;
+    color: #64748b;
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.document-row-v033 {
+    cursor: pointer;
+}
+
+.document-row-v033:hover,
+.document-row-v033.selected {
+    background: #eff6ff;
+}
+
+.file-icon-v033 {
+    display: inline-flex;
+    width: 24px;
+    justify-content: center;
+    margin-right: 6px;
+}
+
+.more-cell-v033 {
+    color: #64748b;
+    font-weight: 900;
+    text-align: right !important;
+}
+
+.document-bottom-actions-v033 {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.document-bottom-actions-v033 button,
+.document-preview-actions-v033 button {
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    color: #0f172a;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.document-bottom-actions-v033 button:hover,
+.document-preview-actions-v033 button:hover {
+    background: #f8fafc;
+}
+
+.document-preview-tabs-v033 {
+    display: flex;
+    gap: 18px;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 14px;
+}
+
+.document-preview-tabs-v033 button {
+    border: 0;
+    background: transparent;
+    padding: 10px 0;
+    color: #475569;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.document-preview-tabs-v033 button.active {
+    color: #2563eb;
+    border-bottom: 2px solid #2563eb;
+}
+
+.document-preview-v033 {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: #475569;
+}
+
+.document-preview-v033.empty-state {
+    justify-content: center;
+    min-height: 220px;
+    text-align: center;
+    color: #94a3b8;
+}
+
+.document-preview-v033 img {
+    width: 100%;
+    max-height: 480px;
+    object-fit: contain;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.pdf-placeholder-v033 {
+    text-align: center;
+    padding: 45px 20px;
+    border: 1px dashed #cbd5e1;
+    background: #f8fafc;
+    border-radius: 14px;
+    color: #334155;
+    font-weight: 700;
+}
+
+.pdf-placeholder-v033 span {
+    display: block;
+    color: #64748b;
+    font-weight: 400;
+    margin-top: 8px;
+}
+
+.document-preview-actions-v033 {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.document-info-v033 {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 13px;
+}
+
+.document-info-v033 strong {
+    color: #0f172a;
+}
+
+@media (max-width: 1500px) {
+    .documents-dropbox-v033 {
+        grid-template-columns: 280px minmax(500px, 1fr);
+    }
+
+    .document-preview-panel-v033 {
+        grid-column: 1 / -1;
+        border-top: 1px solid #e2e8f0 !important;
+    }
+}
+
+@media (max-width: 950px) {
+    .document-kpis-v033 {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .document-toolbar-v033,
+    .documents-dropbox-v033 {
+        grid-template-columns: 1fr;
+    }
+
+    .document-tree-panel-v033,
+    .document-files-panel-v033 {
+        border-right: 0 !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+    }
+}
+
+
+/* ===========================
+   Focus Compta V0.34 - GED professionnelle
+   =========================== */
+
+.document-kpis-v033 {
+    grid-template-columns: repeat(5, minmax(120px, 1fr)) !important;
+    margin-bottom: 18px !important;
+}
+
+.document-kpis-v033 article {
+    padding: 12px 18px !important;
+}
+
+.document-kpis-v033 strong {
+    font-size: 22px !important;
+}
+
+.document-toolbar-v033 {
+    grid-template-columns: minmax(320px, 1fr) 170px 170px 120px !important;
+    margin-bottom: 14px !important;
+}
+
+.documents-dropbox-v033 {
+    grid-template-columns: 270px minmax(680px, 1fr) 330px !important;
+    min-height: calc(100vh - 300px) !important;
+}
+
+.document-tree-panel-v033 {
+    padding: 14px !important;
+}
+
+.document-tree-v033 button {
+    font-size: 13px !important;
+    padding: 8px 9px !important;
+}
+
+.documents-table-v033 {
+    min-width: 980px !important;
+}
+
+.documents-table-v033 th,
+.documents-table-v033 td {
+    padding: 10px 12px !important;
+    font-size: 13px;
+}
+
+.documents-table-v033 td:nth-child(2) {
+    min-width: 240px;
+}
+
+.documents-table-v033 td:nth-child(4) {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.document-preview-panel-v033 {
+    max-width: 360px;
+}
+
+.pdf-frame-v034 {
+    width: 100%;
+    height: 430px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.document-info-v033 {
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.document-row-v033[draggable="true"] {
+    cursor: grab;
+}
+
+.document-row-v033[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+@media (max-width: 1500px) {
+    .documents-dropbox-v033 {
+        grid-template-columns: 250px minmax(560px, 1fr) !important;
+    }
+
+    .document-preview-panel-v033 {
+        max-width: none;
+    }
+}
+
+
+/* ===========================
+   Focus Compta V0.35 - Dossiers intelligents / Favoris / Tags
+   =========================== */
+
+.document-smart-folders-v035 {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 14px 0;
+}
+
+.document-smart-folders-v035 button {
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    color: #334155;
+    border-radius: 999px;
+    padding: 9px 14px;
+    cursor: pointer;
+    font-weight: 700;
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.document-smart-folders-v035 button span {
+    background: #eef2ff;
+    color: #2563eb;
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 12px;
+}
+
+.document-smart-folders-v035 button:hover,
+.document-smart-folders-v035 button.active {
+    background: #0f172a;
+    color: #fff;
+    border-color: #0f172a;
+}
+
+.document-smart-folders-v035 button.active span {
+    background: #fff;
+    color: #0f172a;
+}
+
+.documents-table-v033 td:last-child {
+    color: #2563eb;
+    font-size: 12px;
+    max-width: 150px;
+}
+
+.document-info-v033 span:last-child {
+    color: #2563eb;
+}
+
+.document-preview-actions-v033 {
+    flex-wrap: wrap;
+}
+
+
+/* ===========================
+   Focus Compta V0.36 - Arborescence lisible + actions GED corrigées
+   =========================== */
+
+.documents-dropbox-v033 {
+    grid-template-columns: 360px minmax(620px, 1fr) 360px !important;
+}
+
+.document-tree-panel-v033 {
+    padding: 18px !important;
+}
+
+.tree-search-v036 {
+    width: 100%;
+    margin: 8px 0 14px;
+    padding: 11px 12px;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    font-size: 14px;
+    color: #0f172a;
+    background: #fff;
+}
+
+.document-tree-v033 {
+    gap: 3px !important;
+    max-height: calc(100vh - 360px) !important;
+}
+
+.tree-row-v036 {
+    display: grid !important;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 10px !important;
+    padding-left: calc(10px + (var(--depth, 0) * 18px)) !important;
+    border-radius: 10px;
+    color: #1e293b !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.2;
+}
+
+.tree-row-v036:hover,
+.tree-row-v036.active {
+    background: #eaf3ff !important;
+    color: #0f4db8 !important;
+}
+
+.tree-chevron-v036 {
+    color: #64748b;
+    font-size: 12px;
+    text-align: center;
+}
+
+.tree-label-v036 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-count-v036 {
+    justify-self: end;
+    min-width: 22px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #2563eb;
+    font-size: 12px;
+    text-align: center;
+    font-weight: 800;
+}
+
+.tree-row-v036.active .tree-count-v036 {
+    background: #fff;
+    color: #0f4db8;
+}
+
+.documents-table-v036 {
+    min-width: 760px !important;
+}
+
+.documents-table-v036 th,
+.documents-table-v036 td {
+    font-size: 13px !important;
+    padding: 11px 12px !important;
+}
+
+.documents-table-v036 td:nth-child(2) {
+    min-width: 280px;
+}
+
+.documents-table-v036 td:nth-child(2) small {
+    display: block;
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 500;
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.document-preview-tabs-v033 button.active {
+    color: #2563eb !important;
+    border-bottom: 2px solid #2563eb !important;
+}
+
+.document-info-v033 textarea {
+    width: 100%;
+    min-height: 180px;
+    resize: vertical;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    padding: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #334155;
+    background: #fff;
+}
+
+.pdf-frame-v034 {
+    min-height: 460px;
+}
+
+@media (max-width: 1500px) {
+    .documents-dropbox-v033 {
+        grid-template-columns: 330px minmax(560px, 1fr) !important;
+    }
+}
+
+
+/* ===========================
+   Focus Compta V0.37 - Refonte GED
+   =========================== */
+
+.document-bottom-actions-v033 {
+    display: none !important;
+}
+
+.document-smart-folders-v035 button[data-smart-folder="tags"],
+#tagSelectedDocumentV035 {
+    display: none !important;
+}
+
+.documents-dropbox-v033 {
+    grid-template-columns: 360px minmax(640px, 1fr) 380px !important;
+}
+
+.documents-table-v037 {
+    min-width: 660px !important;
+}
+
+.documents-table-v037 th,
+.documents-table-v037 td {
+    padding: 12px 14px !important;
+}
+
+.documents-table-v037 td:nth-child(2) small {
+    display: block;
+    color: #94a3b8;
+    margin-top: 4px;
+    font-size: 11px;
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.document-preview-actions-v037 {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.document-preview-actions-v037 button {
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    color: #0f172a;
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.document-preview-actions-v037 button:hover {
+    background: #f8fafc;
+}
+
+.context-menu-v037 {
+    position: fixed;
+    z-index: 9999;
+    min-width: 240px;
+    background: #fff;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    box-shadow: 0 18px 60px rgba(15, 23, 42, .18);
+    padding: 8px;
+}
+
+.context-menu-v037 button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: #0f172a;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.context-menu-v037 button:hover {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.context-menu-v037 hr {
+    border: 0;
+    border-top: 1px solid #e2e8f0;
+    margin: 6px 0;
+}
+
+.context-menu-v037 .danger-menu-action {
+    color: #dc2626;
+}
+
+.context-menu-v037 .danger-menu-action:hover {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.history-v037 {
+    gap: 10px !important;
+}
+
+.history-item-v037 {
+    display: grid;
+    gap: 3px;
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.history-item-v037 span {
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.history-item-v037 small {
+    color: #64748b;
+}
+
+.history-item-v037 em {
+    color: #475569;
+    font-style: normal;
+}
+
+.tree-row-v036 {
+    min-height: 36px;
+}
+
+
+/* Focus Compta V0.37.1 - Menu contextuel toujours visible */
+.context-menu-v037 {
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+
+/* Focus Compta V0.37.2 - Arborescence métier */
+.tree-row-v036 {
+    padding-left: calc(12px + (var(--depth, 0) * 28px)) !important;
+    column-gap: 8px !important;
+}
+
+.tree-label-v036 {
+    font-size: 15px !important;
+}
+
+.tree-count-v036 {
+    margin-left: 8px !important;
+}
+
+.documents-table-v0372 {
+    min-width: 620px !important;
+}
+
+.documents-table-v0372 th:nth-child(6),
+.documents-table-v0372 td:nth-child(6),
+#previewMenuV037,
+#previewTagsV036,
+#tagSelectedDocumentV035 {
+    display: none !important;
+}
+
+.document-preview-actions-v037 {
+    display: none !important;
+}
+
+.document-smart-folders-v035 button[data-smart-folder="contracts"],
+.document-smart-folders-v035 button[data-smart-folder="tags"] {
+    display: none !important;
+}
+
+
+/* Focus Compta V0.38 - Dashboard société */
+.summary-card.treasury {
+    background: linear-gradient(135deg, #eff6ff, #ffffff);
+    border-color: #93c5fd;
+}
+
+.summary-card.treasury strong {
+    color: #1d4ed8;
+}
+
+.company-dashboard-panel-v038 {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.company-dashboard-panel-v038 .dashboard-box {
+    min-height: 180px;
+}
+
+#dashboardCashCa {
+    color: #16a34a;
+}
+
+.button-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+
+/* Focus Compta V0.39 - Feuilles de caisse / rappels */
+.cash-reminder-panel-v039 {
+    margin: 16px 0 20px;
+    padding: 16px 18px;
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    border-radius: 16px;
+    color: #92400e;
+    display: grid;
+    gap: 8px;
+}
+
+.cash-reminder-panel-v039 strong {
+    color: #78350f;
+    font-size: 18px;
+}
+
+.cash-reminder-panel-v039 div {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cash-reminder-panel-v039 button {
+    background: #f59e0b;
+    border: 0;
+    border-radius: 10px;
+    color: white;
+    font-weight: 800;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.dashboard-wide-v039 {
+    grid-column: 1 / -1;
+}
+
+.cash-chart-v039 {
+    display: flex;
+    align-items: end;
+    gap: 14px;
+    min-height: 170px;
+    padding: 18px 8px 4px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.cash-chart-bar-wrap-v039 {
+    display: grid;
+    align-items: end;
+    justify-items: center;
+    gap: 7px;
+    min-width: 48px;
+    flex: 1;
+}
+
+.cash-chart-bar-v039 {
+    width: 100%;
+    max-width: 44px;
+    border-radius: 10px 10px 4px 4px;
+    background: #3b82f6;
+}
+
+.cash-chart-bar-wrap-v039 small {
+    color: #64748b;
+    font-size: 11px;
+    text-align: center;
+}
+
+
+/* Focus Compta V0.39.3 - Rapprochement justificatif moderne */
+.match-modal-v0393 {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(15, 23, 42, .35);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.match-modal-card-v0393 {
+    width: min(1180px, 96vw);
+    height: min(760px, 92vh);
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, .25);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+}
+
+.match-modal-header-v0393 {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    padding: 18px 22px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.match-modal-header-v0393 h2 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.match-modal-header-v0393 p {
+    margin: 4px 0 0;
+    color: #64748b;
+}
+
+#closeMatchModalV0393 {
+    border: 0;
+    background: transparent;
+    font-size: 30px;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.match-modal-body-v0393 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    padding: 18px 22px;
+    min-height: 0;
+}
+
+.match-modal-body-v0393 section {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    gap: 12px;
+}
+
+.match-receipt-info-v0393 {
+    display: grid;
+    gap: 5px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 12px;
+    color: #334155;
+}
+
+.match-receipt-info-v0393 strong {
+    color: #0f172a;
+}
+
+.match-preview-v0393 {
+    width: 100%;
+    min-height: 0;
+    height: 100%;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.match-operations-v0393 {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.match-operation-card-v0393 {
+    width: 100%;
+    text-align: left;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    background: #fff;
+    color: #0f172a;
+    padding: 13px 14px;
+    cursor: pointer;
+    display: grid;
+    gap: 6px;
+}
+
+.match-operation-card-v0393:hover,
+.match-operation-card-v0393.selected {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.match-operation-card-v0393 span {
+    color: #334155;
+}
+
+.match-operation-card-v0393 small {
+    color: #2563eb;
+    font-weight: 800;
+}
+
+.match-modal-actions-v0393 {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 10px;
+}
+
+
+/* Focus Compta V0.39.6 - Aperçu dans Rapprochements */
+#matchingPreview {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+}
+
+.matching-doc-info-v0396 {
+    display: grid;
+    gap: 8px;
+}
+
+.matching-doc-info-v0396 p {
+    margin: 0;
+}
+
+.matching-doc-preview-v0396 {
+    width: 100%;
+    min-height: 520px;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
+.matching-doc-preview-frame-v0396 {
+    width: 100%;
+    height: 620px;
+    border: 0;
+    background: #fff;
+}
+
+.matching-doc-preview-image-v0396 {
+    width: 100%;
+    max-height: 620px;
+    object-fit: contain;
+    display: block;
+    background: #fff;
+}
+
+.matching-doc-preview-placeholder-v0396 {
+    padding: 28px;
+    color: #64748b;
+    text-align: center;
+}
+
+
+/* Focus Compta V0.39.7 - Modal saisie + recherche rapprochements */
+.input-modal-v0397 {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    background: rgba(15, 23, 42, .35);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.input-modal-card-v0397 {
+    width: min(460px, 92vw);
+    background: #fff;
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, .25);
+    display: grid;
+    gap: 12px;
+}
+
+.input-modal-card-v0397 h2 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.input-modal-card-v0397 label {
+    color: #64748b;
+}
+
+.input-modal-card-v0397 input {
+    width: 100%;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+}
+
+.matching-search-v0397 {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.matching-search-v0397 input {
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    padding: 11px 13px;
+    font-size: 14px;
+}
+
+.matching-search-v0397 button {
+    padding: 11px 16px;
+}
+
+#matchingSearchResultsV0397 {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+#matchingSearchResultsV0397 h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+#matchingSuggestedResultsV0397 {
+    display: grid;
+    gap: 10px;
+}
+
+
+/* Focus Compta V0.39.9 - Barres de défilement modernes */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(59, 130, 246, 0.45) rgba(226, 232, 240, 0.35);
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(226, 232, 240, 0.35);
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.42);
+    border-radius: 999px;
+    border: 2px solid rgba(248, 250, 252, 0.9);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(37, 99, 235, 0.62);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.sidebar::-webkit-scrollbar,
+.document-tree-v033::-webkit-scrollbar,
+.matching-operations-v0393::-webkit-scrollbar,
+.match-operations-v0393::-webkit-scrollbar {
+    width: 8px;
+}
+
+.document-tree-v033,
+#matchingPreview,
+#matchingSuggestionList,
+.document-preview-v033,
+.page {
+    scrollbar-gutter: stable;
+}
