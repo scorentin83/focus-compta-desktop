@@ -1,13 +1,11 @@
 version: "3.9"
 
 services:
-
   focus-front:
     image: nginx:alpine
     container_name: focus-front
     restart: unless-stopped
     ports:
       - "8080:80"
-
     volumes:
-      - ./frontend:/usr/share/nginx/html:ro
+      - ./frontend/public:/usr/share/nginx/html:ro
