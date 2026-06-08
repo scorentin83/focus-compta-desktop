@@ -2,40 +2,94 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Focus Compta</title>
   <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
   <aside class="sidebar">
-    <div class="logo">Focus Compta</div>
-    <nav>
-      <button class="active">📊 Dashboard</button>
-      <button>🏢 Sociétés</button>
-      <button>🏦 Banque</button>
-      <button>📄 Documents</button>
-      <button>🔗 Rapprochements</button>
-      <button>📤 Exports</button>
-      <button>⚙️ Paramètres</button>
+    <div class="brand">
+      <div class="brand-mark">FC</div>
+      <div>
+        <strong>Focus Compta</strong>
+        <span>Web v0.88</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-item" data-view="companies">🏢 Sociétés</button>
+      <button class="nav-item" data-view="bank">🏦 Banque</button>
+      <button class="nav-item" data-view="documents">📄 Documents</button>
+      <button class="nav-item" data-view="reconciliations">🔗 Rapprochements</button>
+      <button class="nav-item" data-view="exports">📤 Exports</button>
+      <button class="nav-item" data-view="settings">⚙️ Paramètres</button>
     </nav>
   </aside>
 
   <main class="main">
-    <header>
-      <h1>Dashboard</h1>
-      <span>Version Web v0.86</span>
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">Dashboard</h1>
+        <p id="page-subtitle">Cockpit de pré-comptabilité en ligne</p>
+      </div>
+      <div class="status-pill" id="api-status">API...</div>
     </header>
 
-    <section class="cards">
-      <div class="card"><strong>0</strong><span>Sociétés</span></div>
-      <div class="card"><strong>0</strong><span>Documents</span></div>
-      <div class="card"><strong>0</strong><span>Transactions</span></div>
-      <div class="card"><strong>-</strong><span>Dernier rapprochement</span></div>
+    <section id="view-dashboard" class="view active">
+      <div class="cards">
+        <div class="card"><strong id="stat-companies">0</strong><span>Sociétés</span></div>
+        <div class="card"><strong id="stat-documents">0</strong><span>Documents</span></div>
+        <div class="card"><strong id="stat-transactions">0</strong><span>Transactions</span></div>
+        <div class="card"><strong id="stat-last-reco">-</strong><span>Dernier rapprochement</span></div>
+      </div>
+
+      <section class="panel hero-panel">
+        <h2>Bienvenue sur Focus Compta</h2>
+        <p>La base web est opérationnelle. Le module Sociétés est maintenant relié à l'API et à la base serveur.</p>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>Bienvenue sur Focus Compta</h2>
-      <p>La migration web est en cours. Cette interface servira de base à la future application en ligne.</p>
+    <section id="view-companies" class="view">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Sociétés</h2>
+            <p>Créer et gérer les structures du groupe.</p>
+          </div>
+        </div>
+
+        <form id="company-form" class="company-form">
+          <input type="hidden" id="company-id" />
+          <label>Nom de la société<input id="company-name" required placeholder="Lucas Optical" /></label>
+          <label>SIREN<input id="company-siren" placeholder="123456789" /></label>
+          <label>Régime TVA
+            <select id="company-vat">
+              <option value="normal">Normal</option>
+              <option value="simplifie">Simplifié</option>
+              <option value="franchise">Franchise</option>
+            </select>
+          </label>
+          <label>Clôture exercice<input id="company-fiscal" placeholder="31/12" /></label>
+          <label class="full">Notes<input id="company-notes" placeholder="Informations internes" /></label>
+          <div class="form-actions">
+            <button class="primary" type="submit">Enregistrer</button>
+            <button class="secondary" type="button" id="reset-company-form">Annuler</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header"><h2>Liste des sociétés</h2></div>
+        <div id="companies-list" class="list empty">Aucune société pour le moment.</div>
+      </section>
     </section>
+
+    <section id="view-bank" class="view"><section class="panel"><h2>Banque</h2><p>Module à migrer depuis Electron.</p></section></section>
+    <section id="view-documents" class="view"><section class="panel"><h2>Documents</h2><p>Module GED à migrer depuis Electron.</p></section></section>
+    <section id="view-reconciliations" class="view"><section class="panel"><h2>Rapprochements</h2><p>Moteur de rapprochement à migrer.</p></section></section>
+    <section id="view-exports" class="view"><section class="panel"><h2>Exports</h2><p>Dossier expert à migrer.</p></section></section>
+    <section id="view-settings" class="view"><section class="panel"><h2>Paramètres</h2><p>Utilisateurs, rôles et sécurité à venir.</p></section></section>
   </main>
 
   <script src="/js/app.js"></script>

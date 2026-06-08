@@ -18,8 +18,6 @@ services:
       dockerfile: Dockerfile
     container_name: focus-api
     restart: unless-stopped
-    ports:
-      - "3001:3001"
     volumes:
       - focus_api_data:/app/db
 
