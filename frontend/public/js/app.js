@@ -36,10 +36,26 @@ async function loadStats() {
 }
 
 async function loadCompanies() {
-  companiesCache = await api("/companies");
-  console.log("Sociétés :", companiesCache);
-  renderCompanies();
-  qs("#stat-companies").textContent = companiesCache.length;
+  const companies = await api("/companies");
+  console.log("Sociétés :", companies);
+
+  const list = qs("#companies-list");
+  if (!list) return;
+
+  if (!companies.length) {
+    list.innerHTML = `<p class="empty">Aucune société pour le moment.</p>`;
+    return;
+  }
+
+  list.innerHTML = companies.map((company) => `
+    <div class="company-card">
+      <div>
+        <strong>${company.name}</strong>
+        <span>${company.siren || "SIREN non renseigné"}</span>
+      </div>
+      <button onclick="deleteCompany(${company.id})">Supprimer</button>
+    </div>
+  `).join("");
 }
 
 function renderCompanies() {
