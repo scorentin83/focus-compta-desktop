@@ -53,6 +53,10 @@ ensureColumn("companies", "fiscal_year_end", "TEXT");
 ensureColumn("companies", "notes", "TEXT");
 ensureColumn("companies", "updated_at", "DATETIME");
 
+console.log(
+  db.prepare("PRAGMA table_info(companies)").all()
+);
+
 function audit(action, entityType, entityId, payload = {}) {
   db.prepare(`
     INSERT INTO audit_logs (action, entity_type, entity_id, payload)
