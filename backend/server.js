@@ -26,6 +26,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  
 
   CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,6 +37,20 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  const exists = columns.some((col) => col.name === column);
+
+  if (!exists) {
+    db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  }
+}
+
+ensureColumn("companies", "siren", "TEXT");
+ensureColumn("companies", "vat_regime", "TEXT");
+ensureColumn("companies", "fiscal_year_end", "TEXT");
+ensureColumn("companies", "updated_at", "DATETIME");
 
 function audit(action, entityType, entityId, payload = {}) {
   db.prepare(`
