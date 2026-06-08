@@ -47,10 +47,10 @@ function ensureColumn(table, column, definition) {
   }
 }
 
-ensureColumn("companies", "siren", "TEXT");
-ensureColumn("companies", "vat_regime", "TEXT DEFAULT 'normal'");
-ensureColumn("companies", "fiscal_year_end", "TEXT");
 ensureColumn("companies", "notes", "TEXT");
+ensureColumn("companies", "siren", "TEXT");
+ensureColumn("companies", "vat_regime", "TEXT");
+ensureColumn("companies", "fiscal_year_end", "TEXT");
 ensureColumn("companies", "updated_at", "DATETIME");
 
 console.log(
