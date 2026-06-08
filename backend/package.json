@@ -1,9 +1,8 @@
 {
   "name": "focus-compta-backend",
-  "version": "0.85.1",
-  "private": true,
-  "type": "module",
+  "version": "0.87.0",
+  "main": "server.js",
   "scripts": {
-    "dev": "node server.js"
+    "start": "node server.js"
   }
 }
