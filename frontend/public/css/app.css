@@ -1,43 +1,100 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <title>Focus Compta</title>
-  <link rel="stylesheet" href="css/app.css" />
-</head>
-<body>
-  <aside class="sidebar">
-    <div class="logo">Focus Compta</div>
-    <nav>
-      <button class="active">📊 Dashboard</button>
-      <button>🏢 Sociétés</button>
-      <button>🏦 Banque</button>
-      <button>📄 Documents</button>
-      <button>🔗 Rapprochements</button>
-      <button>📤 Exports</button>
-      <button>⚙️ Paramètres</button>
-    </nav>
-  </aside>
+* {
+  box-sizing: border-box;
+}
 
-  <main class="main">
-    <header>
-      <h1>Dashboard</h1>
-      <span>Version Web v0.86</span>
-    </header>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  color: #1f2933;
+  display: flex;
+  min-height: 100vh;
+}
 
-    <section class="cards">
-      <div class="card"><strong>0</strong><span>Sociétés</span></div>
-      <div class="card"><strong>0</strong><span>Documents</span></div>
-      <div class="card"><strong>0</strong><span>Transactions</span></div>
-      <div class="card"><strong>-</strong><span>Dernier rapprochement</span></div>
-    </section>
+.sidebar {
+  width: 260px;
+  background: #111827;
+  color: white;
+  padding: 24px;
+}
 
-    <section class="panel">
-      <h2>Bienvenue sur Focus Compta</h2>
-      <p>La migration web est en cours. Cette interface servira de base à la future application en ligne.</p>
-    </section>
-  </main>
+.logo {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 32px;
+}
 
-  <script src="js/app.js"></script>
-</body>
-</html>
+nav button {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: #d1d5db;
+  border: 0;
+  text-align: left;
+  padding: 14px 12px;
+  border-radius: 10px;
+  font-size: 15px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+nav button.active,
+nav button:hover {
+  background: #2563eb;
+  color: white;
+}
+
+.main {
+  flex: 1;
+  padding: 32px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+header h1 {
+  margin: 0;
+}
+
+header span {
+  color: #6b7280;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.card strong {
+  display: block;
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.card span {
+  color: #6b7280;
+}
+
+.panel {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.panel h2 {
+  margin-top: 0;
+}
