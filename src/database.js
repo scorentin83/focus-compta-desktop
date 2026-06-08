@@ -8,10 +8,11 @@ const STATEMENTS_DIR = path.join(DATA_DIR, 'Releves');
 const RECEIPTS_DIR = path.join(DATA_DIR, 'Justificatifs');
 const RIB_DIR = path.join(DATA_DIR, 'RIB');
 const BACKUPS_DIR = path.join(PROJECT_ROOT, 'FocusComptaBackups');
+const ACCOUNTING_EXPORTS_DIR = path.join(DATA_DIR, 'ExportsComptables');
 const LEGACY_DB_PATH = path.join(PROJECT_ROOT, 'ThetaCompta.db');
 const DB_PATH = path.join(DATA_DIR, 'FocusCompta.db');
 
-[DATA_DIR, STATEMENTS_DIR, RECEIPTS_DIR, RIB_DIR, BACKUPS_DIR].forEach(dir => {
+[DATA_DIR, STATEMENTS_DIR, RECEIPTS_DIR, RIB_DIR, BACKUPS_DIR, ACCOUNTING_EXPORTS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -110,6 +111,75 @@ CREATE TABLE IF NOT EXISTS documents (
     FOREIGN KEY(linked_transaction_id) REFERENCES bank_transactions(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS document_learning_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER,
+    supplier TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    learned_value TEXT,
+    keyword TEXT,
+    source_label TEXT,
+    active INTEGER DEFAULT 1,
+    usage_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, supplier, field_name, keyword)
+);
+
+CREATE TABLE IF NOT EXISTS user_learning_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER,
+    event_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    source_value TEXT,
+    target_value TEXT,
+    payload_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, event_type, entity_type, entity_id, source_value, target_value)
+);
+
+
+CREATE TABLE IF NOT EXISTS document_transaction_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL,
+    transaction_id INTEGER NOT NULL,
+    amount REAL,
+    link_type TEXT DEFAULT 'manual',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(document_id, transaction_id),
+    FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY(transaction_id) REFERENCES bank_transactions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS accounting_export_lots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    export_type TEXT NOT NULL,
+    period_year TEXT,
+    period_month TEXT,
+    filename TEXT,
+    filepath TEXT,
+    documents_count INTEGER DEFAULT 0,
+    statements_count INTEGER DEFAULT 0,
+    total_ttc REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(company_id) REFERENCES companies(id)
+);
+
+CREATE TABLE IF NOT EXISTS accounting_export_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lot_id INTEGER NOT NULL,
+    item_type TEXT NOT NULL,
+    source_id INTEGER,
+    source_path TEXT,
+    display_name TEXT,
+    accounting_year TEXT,
+    accounting_month TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(lot_id) REFERENCES accounting_export_lots(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS third_parties (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER,
@@ -119,6 +189,27 @@ CREATE TABLE IF NOT EXISTS third_parties (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(company_id, name),
     FOREIGN KEY(company_id) REFERENCES companies(id)
+);
+
+
+-- V0.42 : référentiel tiers intelligent.
+-- Ces tables mémorisent les fusions/dissociations validées par l'utilisateur.
+CREATE TABLE IF NOT EXISTS third_party_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alias_key TEXT NOT NULL UNIQUE,
+    alias_label TEXT NOT NULL,
+    canonical_name TEXT NOT NULL,
+    type TEXT DEFAULT 'autre',
+    mode TEXT DEFAULT 'merge',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS third_party_split_exceptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alias_key TEXT NOT NULL UNIQUE,
+    alias_label TEXT NOT NULL,
+    canonical_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS cash_sheets (
@@ -152,6 +243,70 @@ CREATE TABLE IF NOT EXISTS automation_rules (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(company_id) REFERENCES companies(id)
 );
+
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER,
+    action_type TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    label TEXT,
+    details_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(company_id) REFERENCES companies(id)
+);
+
+CREATE TABLE IF NOT EXISTS app_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    email TEXT,
+    role TEXT DEFAULT 'admin',
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_key TEXT NOT NULL UNIQUE,
+    role_label TEXT NOT NULL,
+    permissions_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_company_access (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    company_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, company_id),
+    FOREIGN KEY(user_id) REFERENCES app_users(id),
+    FOREIGN KEY(company_id) REFERENCES companies(id)
+);
+
+CREATE TABLE IF NOT EXISTS app_session (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    current_user_id INTEGER,
+    updated_at DATETIME,
+    FOREIGN KEY(current_user_id) REFERENCES app_users(id)
+);
+
+CREATE TABLE IF NOT EXISTS accounting_period_locks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    period_year TEXT NOT NULL,
+    period_month TEXT NOT NULL,
+    locked INTEGER DEFAULT 0,
+    locked_at DATETIME,
+    locked_by TEXT,
+    unlocked_at DATETIME,
+    unlocked_by TEXT,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME,
+    UNIQUE(company_id, period_year, period_month),
+    FOREIGN KEY(company_id) REFERENCES companies(id)
+);
 `);
 
 function ensureColumn(tableName, columnName, definition) {
@@ -159,7 +314,20 @@ function ensureColumn(tableName, columnName, definition) {
     const exists = columns.some(column => column.name === columnName);
 
     if (!exists) {
-        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+        // SQLite interdit ADD COLUMN avec un DEFAULT non constant
+        // comme CURRENT_TIMESTAMP. On ajoute donc la colonne sans ce
+        // DEFAULT, puis on initialise les lignes existantes.
+        const normalizedDefinition = String(definition || '').trim();
+        const hasCurrentTimestampDefault = /DEFAULT\s+CURRENT_TIMESTAMP/i.test(normalizedDefinition);
+        const safeDefinition = hasCurrentTimestampDefault
+            ? normalizedDefinition.replace(/\s+DEFAULT\s+CURRENT_TIMESTAMP/ig, '')
+            : normalizedDefinition;
+
+        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${safeDefinition}`);
+
+        if (hasCurrentTimestampDefault) {
+            db.prepare(`UPDATE ${tableName} SET ${columnName} = CURRENT_TIMESTAMP WHERE ${columnName} IS NULL`).run();
+        }
     }
 }
 
@@ -200,6 +368,60 @@ ensureColumn('bank_transactions', 'category', 'TEXT');
 ensureColumn('bank_transactions', 'notes', 'TEXT');
 ensureColumn('bank_transactions', 'third_party_id', 'INTEGER');
 ensureColumn('bank_transactions', 'third_party_name', 'TEXT');
+
+ensureColumn('automation_rules', 'confidence', 'REAL DEFAULT 25');
+ensureColumn('automation_rules', 'usage_count', 'INTEGER DEFAULT 0');
+ensureColumn('automation_rules', 'last_used_at', 'DATETIME');
+ensureColumn('automation_rules', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+ensureColumn('automation_rules', 'is_active', 'INTEGER DEFAULT 1');
+ensureColumn('automation_rules', 'source', "TEXT DEFAULT 'manual'");
+ensureColumn('automation_rules', 'auto_apply', 'INTEGER DEFAULT 0');
+
+ensureColumn('audit_log', 'company_id', 'INTEGER');
+ensureColumn('audit_log', 'action_type', 'TEXT');
+ensureColumn('audit_log', 'entity_type', 'TEXT');
+ensureColumn('audit_log', 'entity_id', 'TEXT');
+ensureColumn('audit_log', 'label', 'TEXT');
+ensureColumn('audit_log', 'details_json', 'TEXT');
+ensureColumn('audit_log', 'created_at', 'DATETIME');
+ensureColumn('app_users', 'role', "TEXT DEFAULT 'admin'");
+ensureColumn('app_users', 'is_active', 'INTEGER DEFAULT 1');
+ensureColumn('app_users', 'last_login_at', 'DATETIME');
+ensureColumn('app_users', 'notes', 'TEXT');
+ensureColumn('app_users', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+ensureColumn('user_company_access', 'user_id', 'INTEGER');
+ensureColumn('user_company_access', 'company_id', 'INTEGER');
+ensureColumn('app_session', 'current_user_id', 'INTEGER');
+ensureColumn('app_session', 'updated_at', 'DATETIME');
+ensureColumn('accounting_period_locks', 'company_id', 'INTEGER');
+ensureColumn('accounting_period_locks', 'period_year', 'TEXT');
+ensureColumn('accounting_period_locks', 'period_month', 'TEXT');
+ensureColumn('accounting_period_locks', 'locked', 'INTEGER DEFAULT 0');
+ensureColumn('accounting_period_locks', 'locked_at', 'DATETIME');
+ensureColumn('accounting_period_locks', 'locked_by', 'TEXT');
+ensureColumn('accounting_period_locks', 'unlocked_at', 'DATETIME');
+ensureColumn('accounting_period_locks', 'unlocked_by', 'TEXT');
+ensureColumn('accounting_period_locks', 'note', 'TEXT');
+ensureColumn('accounting_period_locks', 'updated_at', 'DATETIME');
+
+try {
+    const roleDefinitionsV081 = [
+        ['admin', 'Administrateur', { modules: ['*'], canWrite: true, canExport: true, readOnly: false }],
+        ['direction', 'Direction', { modules: ['home','companies','bank','documents','matching','thirdParties','accounting','settings'], canWrite: true, canExport: true, readOnly: false }],
+        ['collaborateur', 'Collaborateur', { modules: ['home','companies','bank','documents','matching'], canWrite: true, canExport: false, readOnly: false }],
+        ['expert_comptable', 'Expert-comptable', { modules: ['home','companies','bank','documents','matching','accounting','exports'], canWrite: false, canExport: true, readOnly: true }]
+    ];
+    const upsertRole = db.prepare(`
+        INSERT INTO app_roles(role_key, role_label, permissions_json) VALUES(?,?,?)
+        ON CONFLICT(role_key) DO UPDATE SET role_label = excluded.role_label, permissions_json = excluded.permissions_json
+    `);
+    roleDefinitionsV081.forEach(([key, label, permissions]) => upsertRole.run(key, label, JSON.stringify(permissions)));
+    const userCount = db.prepare('SELECT COUNT(*) AS count FROM app_users').get().count || 0;
+    if (!userCount) db.prepare(`INSERT INTO app_users(display_name, email, role, is_active, updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)`).run('Administrateur Focus Compta', '', 'admin', 1);
+    const firstUser = db.prepare('SELECT id FROM app_users WHERE is_active = 1 ORDER BY id LIMIT 1').get();
+    if (firstUser) db.prepare(`INSERT OR IGNORE INTO app_session(id, current_user_id, updated_at) VALUES(1, ?, CURRENT_TIMESTAMP)`).run(firstUser.id);
+} catch (_) {}
+
 ensureColumn('bank_transactions', 'search_text', 'TEXT');
 ensureColumn('receipts', 'original_filepath', 'TEXT');
 ensureColumn('documents', 'doc_type', "TEXT DEFAULT 'facture'");
@@ -215,6 +437,46 @@ ensureColumn('documents', 'important', "INTEGER DEFAULT 0");
 ensureColumn('documents', 'third_party_name', 'TEXT');
 ensureColumn('documents', 'history_json', 'TEXT');
 ensureColumn('documents', 'ocr_text', 'TEXT');
+// V0.58.1 : nom métier, nom original, titre et notes documentaires.
+ensureColumn('documents', 'original_filename', 'TEXT');
+ensureColumn('documents', 'smart_filename', 'TEXT');
+ensureColumn('documents', 'smart_renamed_at', 'TEXT');
+ensureColumn('documents', 'document_title', 'TEXT');
+ensureColumn('documents', 'document_notes', 'TEXT');
+
+// V0.44 : champs comptables extraits des documents.
+ensureColumn('documents', 'invoice_number', 'TEXT');
+ensureColumn('documents', 'invoice_date', 'TEXT');
+ensureColumn('documents', 'due_date', 'TEXT');
+ensureColumn('documents', 'amount_ht', 'REAL');
+ensureColumn('documents', 'amount_tva', 'REAL');
+ensureColumn('documents', 'amount_ttc', 'REAL');
+ensureColumn('documents', 'payment_status', "TEXT DEFAULT 'unknown'");
+ensureColumn('documents', 'vat_rate', 'REAL');
+// V0.45.2 : validation humaine et apprentissage documentaire.
+ensureColumn('documents', 'validation_status', "TEXT DEFAULT 'pending'");
+ensureColumn('documents', 'ocr_confidence', 'REAL DEFAULT 0');
+ensureColumn('documents', 'learning_applied', 'INTEGER DEFAULT 0');
+
+// V0.45.5 : intelligence documentaire fournisseur + échéanciers.
+ensureColumn('documents', 'planned_payment_date', 'TEXT');
+ensureColumn('documents', 'payment_method', 'TEXT');
+ensureColumn('documents', 'payment_schedule_json', 'TEXT');
+ensureColumn('documents', 'field_confidence_json', 'TEXT');
+ensureColumn('documents', 'supplier_template', 'TEXT');
+ensureColumn('documents', 'ocr_quality_status', "TEXT DEFAULT 'to_review'");
+
+ensureColumn('documents', 'accounting_impact', "TEXT DEFAULT 'yes'");
+ensureColumn('documents', 'document_nature', "TEXT DEFAULT 'comptable'");
+ensureColumn('documents', 'transmission_status', "TEXT DEFAULT 'not_transmitted'");
+ensureColumn('documents', 'transmitted_at', 'TEXT');
+ensureColumn('documents', 'transmitted_export_lot_id', 'INTEGER');
+ensureColumn('documents', 'accounting_period_year', 'TEXT');
+ensureColumn('documents', 'accounting_period_month', 'TEXT');
+ensureColumn('statements', 'transmission_status', "TEXT DEFAULT 'not_transmitted'");
+ensureColumn('statements', 'transmitted_at', 'TEXT');
+ensureColumn('statements', 'transmitted_export_lot_id', 'INTEGER');
+
 ensureColumn('cash_sheets', 'gross_ca_ht', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'discount_ht', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'net_ca_ht', 'REAL DEFAULT 0');
@@ -227,6 +489,15 @@ ensureColumn('cash_sheets', 'p4x_total', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'p10x_total', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'paylater_total', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'ecart_total', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'tva_brute', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'discount_tva', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'tva_nette', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'cofidis_total', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'amex_total', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'bank_remise_cash', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'bank_remise_check', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'bank_remise_deferred_check', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'is_invalid', 'INTEGER DEFAULT 0');
 ensureColumn('bank_accounts', 'bic', 'TEXT');
 ensureColumn('bank_accounts', 'account_number', 'TEXT');
 ensureColumn('bank_accounts', 'rib_path', 'TEXT');
@@ -256,6 +527,14 @@ ensureColumn('cash_sheets', 'p4x_total', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'p10x_total', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'paylater_total', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'ecart_total', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'tva_brute', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'discount_tva', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'tva_nette', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'cofidis_total', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'amex_total', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'bank_remise_cash', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'bank_remise_check', 'REAL DEFAULT 0');
+ensureColumn('cash_sheets', 'bank_remise_deferred_check', 'REAL DEFAULT 0');
 ensureColumn('documents', 'detected_date', 'TEXT');
 
 
@@ -293,7 +572,31 @@ const defaultCategoryRules = [
     ['REAL PRET', 'Emprunt bancaire'],
     ['DEBLOCAGE', 'Emprunt bancaire'],
     ['BL CONSULTING', 'Immobilier'],
-    ['DEPOT DE GARANTIE', 'Immobilier']
+    ['DEPOT DE GARANTIE', 'Immobilier'],
+    // V0.61.1 : catégories de contrôle banque pour les remises issues des feuilles de caisse.
+    ['REMISE CB', 'Remise CB'],
+    ['TELECOLLECTE', 'Remise CB'],
+    ['TÉLÉCOLLECTE', 'Remise CB'],
+    ['MONETIQUE', 'Remise CB'],
+    ['MONÉTIQUE', 'Remise CB'],
+    ['TPE', 'Remise CB'],
+    ['REMISE ES', 'Remise ES'],
+    ['DEPOT ESPECES', 'Remise ES'],
+    ['DÉPÔT ESPÈCES', 'Remise ES'],
+    ['VERSEMENT ESPECES', 'Remise ES'],
+    ['VERSEMENT ESPÈCES', 'Remise ES'],
+    ['REMISE CH', 'Remise CH'],
+    ['REMISE CHEQUE', 'Remise CH'],
+    ['REMISE CHÈQUE', 'Remise CH'],
+    ['REMISE CHEQUES', 'Remise CH'],
+    ['REMISE CHÈQUES', 'Remise CH'],
+    ['COFIDIS', 'Remise COFIDIS'],
+    ['P3X', 'Remise COFIDIS'],
+    ['P4X', 'Remise COFIDIS'],
+    ['P10X', 'Remise COFIDIS'],
+    ['PAYLATER', 'Remise COFIDIS'],
+    ['AMEX', 'Remise AMEX'],
+    ['AMERICAN EXPRESS', 'Remise AMEX']
 ];
 
 const insertRuleStmt = db.prepare(`
@@ -321,6 +624,28 @@ function findCategoryForLabel(label) {
     return '';
 }
 
+
+function normalizeTypeKeyV0423(type) {
+    return String(type || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function isMutuelleTypeV0423(type) {
+    const key = normalizeTypeKeyV0423(type);
+    return key === 'mutuelle' || key === 'tiers payant' || key === 'tierspayant';
+}
+
+function getBusinessRuleForThirdPartyTypeV0423(type) {
+    if (isMutuelleTypeV0423(type)) {
+        return { category: 'Tiers-Payant', status: 'verified', label: 'Type Mutuelle' };
+    }
+    return null;
+}
+
 function createCompany(name) {
     return db.prepare(`
         INSERT INTO companies(name)
@@ -334,6 +659,101 @@ function getCompanies() {
         FROM companies
         ORDER BY name
     `).all();
+}
+
+function updateCompany(data) {
+    const id = Number(data?.id);
+    const name = String(data?.name || '').trim();
+    if (!id || !name) {
+        return { updated: false, message: 'Société invalide.' };
+    }
+
+    db.prepare(`
+        UPDATE companies
+        SET name = ?
+        WHERE id = ?
+    `).run(name, id);
+
+    return { updated: true, message: 'Société modifiée.' };
+}
+
+function getCompanyDeletionPreview(companyId) {
+    const id = Number(companyId);
+    const company = db.prepare(`SELECT * FROM companies WHERE id = ?`).get(id);
+    if (!company) {
+        return { found: false, message: 'Société introuvable.' };
+    }
+
+    const accounts = db.prepare(`SELECT id FROM bank_accounts WHERE company_id = ?`).all(id);
+    const accountIds = accounts.map(row => row.id);
+    const placeholders = accountIds.map(() => '?').join(',');
+
+    const statements = accountIds.length
+        ? db.prepare(`SELECT COUNT(*) AS count FROM statements WHERE bank_account_id IN (${placeholders})`).get(...accountIds).count
+        : 0;
+    const transactions = accountIds.length
+        ? db.prepare(`SELECT COUNT(*) AS count FROM bank_transactions WHERE bank_account_id IN (${placeholders})`).get(...accountIds).count
+        : 0;
+    const receipts = accountIds.length
+        ? db.prepare(`
+            SELECT COUNT(*) AS count
+            FROM receipts
+            WHERE transaction_id IN (
+                SELECT id FROM bank_transactions WHERE bank_account_id IN (${placeholders})
+            )
+        `).get(...accountIds).count
+        : 0;
+
+    const documents = db.prepare(`SELECT COUNT(*) AS count FROM documents WHERE company_id = ?`).get(id).count;
+    const thirdParties = db.prepare(`SELECT COUNT(*) AS count FROM third_parties WHERE company_id = ?`).get(id).count;
+    const cashSheets = db.prepare(`SELECT COUNT(*) AS count FROM cash_sheets WHERE company_id = ?`).get(id).count;
+    const rules = db.prepare(`SELECT COUNT(*) AS count FROM automation_rules WHERE company_id = ?`).get(id).count;
+
+    return {
+        found: true,
+        company,
+        counts: {
+            accounts: accounts.length,
+            statements,
+            transactions,
+            receipts,
+            documents,
+            thirdParties,
+            cashSheets,
+            rules
+        }
+    };
+}
+
+function deleteCompany(companyId) {
+    const id = Number(companyId);
+    const preview = getCompanyDeletionPreview(id);
+    if (!preview.found) return preview;
+
+    const tx = db.transaction(() => {
+        const accountIds = db.prepare(`SELECT id FROM bank_accounts WHERE company_id = ?`).all(id).map(row => row.id);
+        if (accountIds.length) {
+            const placeholders = accountIds.map(() => '?').join(',');
+            db.prepare(`
+                DELETE FROM receipts
+                WHERE transaction_id IN (
+                    SELECT id FROM bank_transactions WHERE bank_account_id IN (${placeholders})
+                )
+            `).run(...accountIds);
+            db.prepare(`DELETE FROM bank_transactions WHERE bank_account_id IN (${placeholders})`).run(...accountIds);
+            db.prepare(`DELETE FROM statements WHERE bank_account_id IN (${placeholders})`).run(...accountIds);
+            db.prepare(`DELETE FROM bank_accounts WHERE id IN (${placeholders})`).run(...accountIds);
+        }
+
+        db.prepare(`DELETE FROM documents WHERE company_id = ?`).run(id);
+        db.prepare(`DELETE FROM third_parties WHERE company_id = ?`).run(id);
+        db.prepare(`DELETE FROM cash_sheets WHERE company_id = ?`).run(id);
+        db.prepare(`DELETE FROM automation_rules WHERE company_id = ?`).run(id);
+        db.prepare(`DELETE FROM companies WHERE id = ?`).run(id);
+    });
+
+    tx();
+    return { deleted: true, message: 'Société supprimée.', preview };
 }
 
 function createBankAccount(dataOrCompanyId, bankNameArg = '', accountNameArg = '', ibanArg = '') {
@@ -356,9 +776,10 @@ function createBankAccount(dataOrCompanyId, bankNameArg = '', accountNameArg = '
             account_number,
             rib_path,
             rib_original_path,
-            notes
+            notes,
+            statement_identifiers
         )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         data.companyId,
         data.bankName,
@@ -510,7 +931,7 @@ function cleanupOrphanDocumentLinks() {
         SET status = 'unmatched'
         WHERE status = 'matched'
         AND linked_transaction_id IS NULL
-        AND COALESCE(doc_type, 'facture') NOT IN ('releve', 'rib', 'contrat')
+        AND COALESCE(doc_type, 'facture') IN ('facture', 'avoir')
     `).run();
 
     return true;
@@ -560,15 +981,7 @@ function deleteStatement(statementId) {
 }
 
 function createTransaction(bankAccountId, statementId, dateOperation, label, amount, type, pdfSource, category = '') {
-    const finalCategory = category || findCategoryForLabel(label);
-    const searchText = buildTransactionSearchText({
-        label,
-        category: finalCategory,
-        notes: '',
-        pdf_source: pdfSource,
-        amount
-    });
-
+    let inferredThirdPartyType = '';
     let thirdPartyId = null;
     let thirdPartyName = '';
 
@@ -576,13 +989,55 @@ function createTransaction(bankAccountId, statementId, dateOperation, label, amo
         const bankAccount = db.prepare(`SELECT * FROM bank_accounts WHERE id = ?`).get(bankAccountId);
         if (bankAccount) {
             const inferred = inferThirdPartyFromLabel(label);
+            inferredThirdPartyType = inferred.type || '';
             const third = getOrCreateThirdParty(bankAccount.company_id, inferred.name, inferred.type);
             if (third) {
                 thirdPartyId = third.id;
                 thirdPartyName = third.name;
+                inferredThirdPartyType = third.type || inferredThirdPartyType;
             }
         }
     } catch (error) {}
+
+    const businessRule = getBusinessRuleForThirdPartyTypeV0423(inferredThirdPartyType);
+    let finalCategory = businessRule ? businessRule.category : (category || findCategoryForLabel(label));
+    let finalStatus = businessRule ? businessRule.status : 'missing';
+    let notes = businessRule ? `Règle métier : ${businessRule.label} → ${businessRule.category} / Vérifié` : '';
+
+    // V0.55.2 — appliquer les règles automatiques dès l'import du relevé.
+    // Avant, certaines règles donnaient le statut Vérifié mais la catégorie restait vide
+    // jusqu'à une application manuelle. On applique ici catégorie + statut en même temps.
+    try {
+        const bankAccount = db.prepare(`SELECT ba.*, c.id AS company_id FROM bank_accounts ba LEFT JOIN companies c ON c.id = ba.company_id WHERE ba.id = ?`).get(bankAccountId);
+        const rules = getAutomationRules(bankAccount?.company_id || null);
+        const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const haystacks = {
+            account_name: `${bankAccount?.account_name || ''} ${bankAccount?.bank_name || ''}`,
+            label: `${label || ''}`,
+            third_party_name: `${thirdPartyName || ''}`,
+            all: `${bankAccount?.account_name || ''} ${bankAccount?.bank_name || ''} ${label || ''} ${thirdPartyName || ''}`
+        };
+        for (const rule of rules) {
+            if (!rule.keyword) continue;
+            const target = rule.target || 'all';
+            const haystack = normalize(haystacks[target] || haystacks.all);
+            if (!haystack.includes(normalize(rule.keyword))) continue;
+            if (rule.category) finalCategory = rule.category;
+            if (rule.status) finalStatus = rule.status;
+            const ruleNote = `Règle auto import : ${rule.keyword}`;
+            notes = notes ? `${notes}
+${ruleNote}` : ruleNote;
+            break;
+        }
+    } catch (error) {}
+
+    const searchText = buildTransactionSearchText({
+        label,
+        category: finalCategory,
+        notes,
+        pdf_source: pdfSource,
+        amount
+    });
 
     return db.prepare(`
         INSERT INTO bank_transactions(
@@ -600,7 +1055,7 @@ function createTransaction(bankAccountId, statementId, dateOperation, label, amo
             third_party_id,
             third_party_name
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'missing', ?, '', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         bankAccountId,
         statementId,
@@ -609,7 +1064,9 @@ function createTransaction(bankAccountId, statementId, dateOperation, label, amo
         amount,
         type,
         pdfSource,
+        finalStatus,
         finalCategory,
+        notes,
         searchText,
         thirdPartyId,
         thirdPartyName
@@ -675,6 +1132,7 @@ function getTransactions(bankAccountId, filters = {}) {
         SELECT
             t.*,
             s.filename AS statement_filename,
+            s.filepath AS statement_filepath,
             s.statement_year,
             s.statement_month,
             COUNT(r.id) AS receipts_count
@@ -695,6 +1153,7 @@ function getTransaction(transactionId) {
         SELECT
             t.*,
             s.filename AS statement_filename,
+            s.filepath AS statement_filepath,
             s.statement_year,
             s.statement_month,
             COUNT(r.id) AS receipts_count
@@ -717,8 +1176,7 @@ function updateTransactionStatus(transactionId, status) {
 function updateTransactionDetails(transactionId, category, notes) {
     const result = db.prepare(`
         UPDATE bank_transactions
-        SET category = ?, notes = ?,
-            statement_identifiers = ?
+        SET category = ?, notes = ?
         WHERE id = ?
     `).run(category, notes, transactionId);
 
@@ -1081,6 +1539,7 @@ function searchTransactionsForDocument(companyId, query = '', limit = 25) {
         SELECT
             t.*,
             s.filename AS statement_filename,
+            s.filepath AS statement_filepath,
             s.statement_year,
             s.statement_month,
             COUNT(r.id) AS receipts_count
@@ -1185,22 +1644,58 @@ function createDocument(data) {
             folder_path,
             doc_type,
             status,
-            file_hash
+            file_hash,
+            invoice_number,
+            invoice_date,
+            due_date,
+            amount_ht,
+            amount_tva,
+            amount_ttc,
+            payment_status,
+            vat_rate,
+            ocr_text,
+            validation_status,
+            ocr_confidence,
+            learning_applied,
+            planned_payment_date,
+            payment_method,
+            payment_schedule_json,
+            field_confidence_json,
+            supplier_template,
+            ocr_quality_status
         )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         data.companyId || null,
         data.filename,
         data.filepath,
         data.originalFilepath || null,
-        data.detectedAmount ?? null,
-        data.detectedReference || '',
-        data.detectedSupplier || '',
-        data.detectedDate || '',
+        data.detectedAmount ?? data.amountTtc ?? null,
+        data.detectedReference || data.invoiceNumber || '',
+        data.detectedSupplier || data.supplier || '',
+        data.detectedDate || data.invoiceDate || '',
         data.folderPath || '',
         data.docType || data.doc_type || 'facture',
         data.status || 'unmatched',
-        data.fileHash || data.file_hash || ''
+        data.fileHash || data.file_hash || '',
+        data.invoiceNumber || data.detectedReference || '',
+        data.invoiceDate || data.detectedDate || '',
+        data.dueDate || '',
+        data.amountHt ?? null,
+        data.amountTva ?? null,
+        data.amountTtc ?? data.detectedAmount ?? null,
+        data.paymentStatus || 'unknown',
+        data.vatRate ?? null,
+        data.ocrText || data.ocr_text || '',
+        data.validationStatus || 'pending',
+        data.ocrConfidence ?? 0,
+        data.learningApplied ? 1 : 0,
+        data.plannedPaymentDate || data.planned_payment_date || '',
+        data.paymentMethod || data.payment_method || '',
+        data.paymentScheduleJson || data.payment_schedule_json || (Array.isArray(data.paymentSchedule) ? JSON.stringify(data.paymentSchedule) : ''),
+        data.fieldConfidenceJson || data.field_confidence_json || (data.fieldConfidence ? JSON.stringify(data.fieldConfidence) : ''),
+        data.supplierTemplate || data.supplier_template || '',
+        data.ocrQualityStatus || data.ocr_quality_status || 'to_review'
     );
 }
 
@@ -1277,7 +1772,7 @@ function linkDocumentToTransaction(documentId, transactionId) {
     if (!doc || !tx) return { ok: false };
 
     const dbTx = db.transaction(() => {
-        db.prepare(`UPDATE documents SET linked_transaction_id = ?, status = 'matched' WHERE id = ?`).run(transactionId, documentId);
+        db.prepare(`UPDATE documents SET linked_transaction_id = ?, status = 'matched', payment_status = 'paid' WHERE id = ?`).run(transactionId, documentId);
 
         const existingReceipt = db.prepare(`
             SELECT id
@@ -1317,7 +1812,7 @@ function findDocumentMatches(companyId, documentId, limit = 8) {
         LIMIT 1000
     `).all(companyId);
 
-    const amount = Number(doc.detected_amount || 0);
+    const amount = Number(doc.amount_ttc || doc.detected_amount || 0);
     const scored = rows.map(row => {
         const haystack = normalizeSearchText([row.label, row.category, row.notes].join(' '));
         let score = 0;
@@ -1331,44 +1826,109 @@ function findDocumentMatches(companyId, documentId, limit = 8) {
 }
 
 
+
+
+function normalizeAliasKeyV042(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getThirdPartyIntelligenceRulesV042(withType = false) {
+    const rules = [
+        [/\bMMA\s*IARD\b|\bMMA\b/, 'MMA IARD', 'Mutuelle'],
+        [/\bALLIANZ\b/, 'Allianz', 'Mutuelle'],
+        [/\bAXA\b/, 'AXA', 'Mutuelle'],
+        [/\bVIAMEDIS\b/, 'Viamedis', 'Mutuelle'],
+        [/\bALMERYS\b/, 'Almerys', 'Mutuelle'],
+        [/\bACTIL\b/, 'Actil', 'Mutuelle'],
+        [/\bCETIP\b/, 'CETIP', 'Mutuelle'],
+        [/\bOXANTIS\b/, 'Oxantis', 'Mutuelle'],
+        [/\bKORELIO\b/, 'Korelio', 'Mutuelle'],
+        [/\bSP\s*SANTE\b|\bSPSANTE\b/, 'SP Santé', 'Mutuelle'],
+        [/\bHARMONIE\b/, 'Harmonie Mutuelle', 'Mutuelle'],
+        [/\bMALAKOFF\b|\bHUMANIS\b/, 'Malakoff Humanis', 'Mutuelle'],
+        [/\bAG2R\b|\bREUNICA\b/, 'AG2R La Mondiale', 'Mutuelle'],
+        [/\bCPAM\b|SECURITE\s*SOCIALE/, 'CPAM', 'Mutuelle'],
+        [/\bDGFIP\b/, 'DGFIP', 'organisme'],
+        [/\bURSSAF\b/, 'URSSAF', 'organisme'],
+        [/GRAND\s*VISION|GRANDVISION/, 'GrandVision', 'fournisseur'],
+        [/\bEDENRED\b/, 'Edenred', 'fournisseur'],
+        [/CREDIT\s*AGRICOLE|\bCRCAM\b/, 'Crédit Agricole', 'banque'],
+        [/ELECTRICITE\s*DE\s*FRANCE|\bEDF\b/, 'EDF', 'fournisseur'],
+        [/\bENGIE\b/, 'Engie', 'fournisseur'],
+        [/TOTAL\s*ENERGIES|TOTALENERGIES/, 'TotalEnergies', 'fournisseur'],
+        [/\bORANGE\b/, 'Orange', 'fournisseur'],
+        [/\bAUTOROUTES\b/, 'Autoroutes du Sud', 'fournisseur'],
+        [/\bMULTITEK\b/, 'Multitek Services', 'fournisseur'],
+        [/EURO\s*CLIMAT/, 'Euro Climat', 'fournisseur'],
+        [/\bJAYET\b/, 'Jayet', 'fournisseur'],
+        [/VERSEMENT\s+MONTAUROUX/, 'Versement Montauroux SAS', 'client']
+    ];
+    return withType ? rules : rules.map(([pattern, name]) => [pattern, name]);
+}
+
+function getLearnedThirdPartyAliasV042(label) {
+    const key = normalizeAliasKeyV042(label);
+    if (!key) return null;
+    return db.prepare(`SELECT * FROM third_party_aliases WHERE alias_key = ?`).get(key) || null;
+}
+
+function saveThirdPartyAliasV042(aliasLabel, canonicalName, type = 'autre', mode = 'merge') {
+    const aliasKey = normalizeAliasKeyV042(aliasLabel);
+    const canonical = String(canonicalName || '').trim();
+    if (!aliasKey || !canonical) return { ok: false };
+    db.prepare(`
+        INSERT INTO third_party_aliases(alias_key, alias_label, canonical_name, type, mode)
+        VALUES(?, ?, ?, ?, ?)
+        ON CONFLICT(alias_key) DO UPDATE SET
+            alias_label = excluded.alias_label,
+            canonical_name = excluded.canonical_name,
+            type = excluded.type,
+            mode = excluded.mode
+    `).run(aliasKey, String(aliasLabel || '').trim(), canonical, String(type || 'autre'), String(mode || 'merge'));
+    return { ok: true };
+}
+
+function cleanThirdPartyLabel(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\bFR[0-9A-Z]{8,}\b/gi, ' ')
+        .replace(/\b[A-F0-9]{16,}\b/gi, ' ')
+        .replace(/\b\d{6,}\b/g, ' ')
+        .replace(/\b\d{1,2}[H:]\d{0,2}\b/gi, ' ')
+        .replace(/\b\d{2}[./-]\d{2}(?:[./-]\d{2,4})?\b/g, ' ')
+        .replace(/\b(FACTURE|FAC|REF|RUM|CORE|B2B|MANDAT|IBAN|VIREMENT|VIRE|VIR|INST|WEB|PRLV|PRELEVEMENT|REMISE|CARTE|COM|TP)\b/gi, ' ')
+        .replace(/[\-_:/.,;()\[\]{}]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function inferThirdPartyFromLabel(label) {
-    const value = String(label || '')
+    const raw = String(label || '');
+    const value = cleanThirdPartyLabel(raw).toUpperCase();
+    const rawUpper = raw
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toUpperCase();
 
-    const rules = [
-        ['ELECTRICITE DE FRANCE', 'EDF', 'fournisseur'],
-        ['EDF', 'EDF', 'fournisseur'],
-        ['URSSAF', 'URSSAF', 'organisme'],
-        ['CREDIT AGRICOLE', 'Crédit Agricole', 'banque'],
-        ['CRCAM', 'Crédit Agricole', 'banque'],
-        ['GRANDVISION', 'GrandVision', 'fournisseur'],
-        ['MULTITEK', 'Multitek Services', 'fournisseur'],
-        ['EURO CLIMAT', 'Euro Climat', 'fournisseur'],
-        ['ORANGE', 'Orange', 'fournisseur'],
-        ['MALAKOFF', 'Malakoff Humanis', 'organisme'],
-        ['DGFIP', 'DGFIP', 'organisme'],
-        ['CPAM', 'CPAM', 'organisme'],
-        ['ALMERYS', 'Almerys', 'organisme'],
-        ['VIAMEDIS', 'Viamedis', 'organisme'],
-        ['KORELIO', 'Korelio', 'organisme'],
-        ['ALLIANZ', 'Allianz', 'assurance'],
-        ['AUTOROUTES', 'Autoroutes du Sud', 'fournisseur'],
-        ['JAYET', 'Jayet', 'fournisseur']
-    ];
+    const rules = getThirdPartyIntelligenceRulesV042(true);
 
-    const found = rules.find(([keyword]) => value.includes(keyword));
+    const found = rules.find(([pattern]) => pattern.test(rawUpper) || pattern.test(value));
     if (found) return { name: found[1], type: found[2] };
 
-    let cleaned = String(label || '')
-        .replace(/^(PRLV|VIREMENT|VIR INST|VIREMENT WEB|REMISE|COM CARTE|ECH PRET|REAL PRET)\s+/i, '')
-        .replace(/\b\d{2}[./]\d{2}(?:[./]\d{2,4})?\b/g, '')
-        .replace(/\b\d[\d\s,.]*\b/g, '')
-        .replace(/\s+/g, ' ')
+    let cleaned = cleanThirdPartyLabel(raw)
+        .replace(/^(SAS|SARL|SA|EURL|SCI|SELARL)\s+/i, '')
+        .replace(/\s+(SAS|SARL|SA|EURL|SCI|SELARL)$/i, '')
         .trim();
 
-    cleaned = cleaned.split(/\s+(FACTURE|REF|RUM|CORE|B2B|TP-|VIR\/)/i)[0].trim();
+    cleaned = cleaned.split(/\s+(FACTURE|REF|RUM|CORE|B2B|TP|VIR)\b/i)[0].trim();
+    cleaned = cleaned.replace(/\b[A-Z]{0,4}\d{3,}[A-Z0-9]*\b/gi, ' ').replace(/\s+/g, ' ').trim();
 
     return {
         name: cleaned ? cleaned.slice(0, 80) : 'Non identifié',
@@ -1376,22 +1936,32 @@ function inferThirdPartyFromLabel(label) {
     };
 }
 
+
 function getOrCreateThirdParty(companyId, name, type = 'autre') {
     if (!companyId || !name) return null;
 
-    const existing = db.prepare(`
+    const canonical = getCanonicalThirdPartyName(name);
+    const key = normalizeThirdPartyName(canonical);
+    const candidates = db.prepare(`
         SELECT *
         FROM third_parties
         WHERE company_id = ?
-        AND LOWER(name) = LOWER(?)
-    `).get(companyId, name);
+    `).all(companyId);
 
-    if (existing) return existing;
+    const existing = candidates.find(row => normalizeThirdPartyName(row.name) === key);
+    if (existing) {
+        if (existing.name !== canonical) {
+            db.prepare(`UPDATE third_parties SET name = ? WHERE id = ?`).run(canonical, existing.id);
+            db.prepare(`UPDATE bank_transactions SET third_party_name = ? WHERE third_party_id = ?`).run(canonical, existing.id);
+            return db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(existing.id);
+        }
+        return existing;
+    }
 
     const result = db.prepare(`
         INSERT INTO third_parties(company_id, name, type)
         VALUES(?, ?, ?)
-    `).run(companyId, name, type);
+    `).run(companyId, canonical, type);
 
     return db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(result.lastInsertRowid);
 }
@@ -1420,26 +1990,161 @@ function backfillThirdParties(companyId = null) {
         if (third) update.run(third.id, third.name, row.id);
     });
 
+    if (rows.length) applyBusinessRulesToThirdPartiesV0423({ companyId, force: false });
     return rows.length;
 }
 
-function getThirdParties(companyId = null) {
-    const where = companyId ? 'WHERE tp.company_id = ?' : '';
-    const params = companyId ? [companyId] : [];
 
-    return db.prepare(`
+function getThirdPartyTypeOptionsV0423() {
+    const defaults = ['Mutuelle', 'Tiers-payant', 'fournisseur', 'client', 'organisme', 'banque', 'assurance', 'administration', 'autre'];
+    const existing = db.prepare(`SELECT DISTINCT type FROM third_parties WHERE type IS NOT NULL AND TRIM(type) != ''`).all().map(row => row.type);
+    return Array.from(new Set([...defaults, ...existing]))
+        .filter(Boolean)
+        .sort((a, b) => String(a).localeCompare(String(b), 'fr', { sensitivity: 'base' }));
+}
+
+function applyBusinessRulesToThirdPartiesV0423(options = {}) {
+    const companyId = options.companyId ? Number(options.companyId) : null;
+    const thirdPartyIds = Array.isArray(options.thirdPartyIds) ? options.thirdPartyIds.map(Number).filter(Boolean) : [];
+    const force = options.force !== false;
+
+    const where = [];
+    const params = [];
+    where.push(`tp.type IS NOT NULL`);
+    where.push(`LOWER(REPLACE(REPLACE(REPLACE(tp.type, '-', ''), ' ', ''), '_', '')) IN ('mutuelle','tierspayant')`);
+    if (companyId) {
+        where.push(`ba.company_id = ?`);
+        params.push(companyId);
+    }
+    if (thirdPartyIds.length) {
+        where.push(`tp.id IN (${thirdPartyIds.map(() => '?').join(',')})`);
+        params.push(...thirdPartyIds);
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const sql = force ? `
+        UPDATE bank_transactions
+        SET category = 'Tiers-Payant',
+            status = 'verified',
+            notes = TRIM(COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE '
+' END || 'Règle métier : type Mutuelle → Tiers-Payant / Vérifié'),
+            search_text = NULL
+        WHERE id IN (
+            SELECT t.id
+            FROM bank_transactions t
+            LEFT JOIN third_parties tp ON tp.id = t.third_party_id
+            LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            ${whereSql}
+        )
+    ` : `
+        UPDATE bank_transactions
+        SET category = CASE WHEN category IS NULL OR category = '' THEN 'Tiers-Payant' ELSE category END,
+            status = CASE WHEN status IS NULL OR status = '' OR status = 'missing' OR status = 'review' THEN 'verified' ELSE status END,
+            notes = TRIM(COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE '
+' END || 'Règle métier : type Mutuelle → Tiers-Payant / Vérifié'),
+            search_text = NULL
+        WHERE id IN (
+            SELECT t.id
+            FROM bank_transactions t
+            LEFT JOIN third_parties tp ON tp.id = t.third_party_id
+            LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            ${whereSql}
+        )
+    `;
+    const result = db.prepare(sql).run(...params);
+
+    const changedRows = db.prepare(`
+        SELECT id, label, category, notes, pdf_source, amount
+        FROM bank_transactions
+        WHERE search_text IS NULL
+    `).all();
+    const updateSearch = db.prepare(`UPDATE bank_transactions SET search_text = ? WHERE id = ?`);
+    changedRows.forEach(row => updateSearch.run(buildTransactionSearchText(row), row.id));
+
+    return { updated: result.changes || 0 };
+}
+
+function getThirdParties(companyId = null, filters = {}) {
+    const year = filters && filters.year && filters.year !== 'all' ? String(filters.year) : null;
+    const where = [];
+    const params = [];
+
+    if (companyId) {
+        where.push('ba.company_id = ?');
+        params.push(companyId);
+    }
+
+    if (year) {
+        where.push(`COALESCE(s.statement_year, substr(t.date_operation, -4)) = ?`);
+        params.push(year);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const rows = db.prepare(`
         SELECT
-            tp.*,
+            tp.id,
+            tp.company_id,
+            tp.name,
+            tp.type,
+            tp.notes,
             COUNT(t.id) AS operations_count,
             COALESCE(SUM(t.amount), 0) AS balance,
             COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0) AS debit_total,
             COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0) AS credit_total
         FROM third_parties tp
         LEFT JOIN bank_transactions t ON t.third_party_id = tp.id
-        ${where}
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN statements s ON s.id = t.statement_id
+        ${whereSql}
         GROUP BY tp.id
-        ORDER BY debit_total DESC, credit_total DESC, tp.name
     `).all(...params);
+
+    const grouped = new Map();
+    rows.forEach(row => {
+        const canonical = getCanonicalThirdPartyName(row.name);
+        const key = normalizeThirdPartyName(canonical);
+        if (!key) return;
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                ...row,
+                id: row.id,
+                third_party_ids: [row.id],
+                name: canonical,
+                type: row.type || 'autre',
+                operations_count: 0,
+                balance: 0,
+                debit_total: 0,
+                credit_total: 0
+            });
+        }
+        const target = grouped.get(key);
+        target.third_party_ids.push(row.id);
+        if (!target.type || target.type === 'autre') target.type = row.type || 'autre';
+        target.operations_count += Number(row.operations_count || 0);
+        target.balance += Number(row.balance || 0);
+        target.debit_total += Number(row.debit_total || 0);
+        target.credit_total += Number(row.credit_total || 0);
+    });
+
+    return Array.from(grouped.values())
+        .filter(row => Number(row.operations_count || 0) > 0)
+        .sort((a, b) => Number(b.debit_total || 0) - Number(a.debit_total || 0) || Number(b.credit_total || 0) - Number(a.credit_total || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' }));
+}
+
+function getThirdPartyYears(companyId = null) {
+    const where = companyId ? 'WHERE ba.company_id = ?' : '';
+    const params = companyId ? [companyId] : [];
+    return db.prepare(`
+        SELECT DISTINCT COALESCE(s.statement_year, substr(t.date_operation, -4)) AS year
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN statements s ON s.id = t.statement_id
+        ${where}
+        AND COALESCE(s.statement_year, substr(t.date_operation, -4)) IS NOT NULL
+        AND COALESCE(s.statement_year, substr(t.date_operation, -4)) != ''
+        ORDER BY year DESC
+    `.replace('WHERE\n        AND', 'WHERE')).all(...params).map(row => row.year).filter(Boolean);
 }
 
 function updateTransactionThirdParty(transactionId, thirdPartyName, type = 'autre') {
@@ -1461,7 +2166,7 @@ function updateTransactionThirdParty(transactionId, thirdPartyName, type = 'autr
 }
 
 function getDocumentsDashboard(companyId = null) {
-    const where = companyId ? 'WHERE d.company_id = ?' : '';
+    const where = companyId ? 'WHERE d.company_id = ? AND d.deleted_at IS NULL' : 'WHERE d.deleted_at IS NULL';
     const params = companyId ? [companyId] : [];
     return db.prepare(`
         SELECT
@@ -1469,7 +2174,10 @@ function getDocumentsDashboard(companyId = null) {
             SUM(CASE WHEN d.status = 'matched' THEN 1 ELSE 0 END) AS matched,
             SUM(CASE WHEN d.status != 'matched' THEN 1 ELSE 0 END) AS unmatched,
             SUM(CASE WHEN d.doc_type = 'releve' THEN 1 ELSE 0 END) AS statements,
-            SUM(CASE WHEN d.doc_type = 'facture' THEN 1 ELSE 0 END) AS invoices
+            SUM(CASE WHEN d.doc_type = 'facture' THEN 1 ELSE 0 END) AS invoices,
+            COALESCE(SUM(CASE WHEN COALESCE(d.payment_status,'unknown') != 'paid' THEN COALESCE(d.amount_ttc, d.detected_amount, 0) ELSE 0 END), 0) AS payable_ttc,
+            COALESCE(SUM(COALESCE(d.amount_tva, 0)), 0) AS vat_detected,
+            SUM(CASE WHEN d.due_date IS NOT NULL AND d.due_date != '' AND COALESCE(d.payment_status,'unknown') != 'paid' THEN 1 ELSE 0 END) AS invoices_with_due_date
         FROM documents d
         ${where}
     `).get(...params);
@@ -1477,33 +2185,37 @@ function getDocumentsDashboard(companyId = null) {
 
 
 
+
 function normalizeThirdPartyName(name) {
-    return String(name || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+    return cleanThirdPartyLabel(name)
         .toUpperCase()
-        .replace(/\b(SAS|SARL|SA|EURL|S\.A\.S\.|S\.A\.R\.L\.)\b/g, '')
+        .replace(/\b(SAS|SARL|SA|EURL|SCI|SELARL|SOCIETE|FRANCE|COMPANY|COMPAGNIE)\b/g, ' ')
+        .replace(/\b(FR|FRA|VIRE|VIREMENT|PRLV|PRELEVEMENT|CARTE|PISP|FINTE)\b/g, ' ')
+        .replace(/\b[A-Z]*\d+[A-Z0-9]*\b/g, ' ')
         .replace(/[^A-Z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 }
 
 function getCanonicalThirdPartyName(name) {
-    const normalized = normalizeThirdPartyName(name);
-    const rules = [
-        [/COFIDIS/, 'Cofidis'],
-        [/CREDIT AGRICOLE|CRCAM/, 'Crédit Agricole'],
-        [/MULTITEK/, 'Multitek Services'],
-        [/EURO CLIMAT/, 'Euro Climat'],
-        [/EDF|ELECTRICITE DE FRANCE/, 'EDF'],
-        [/URSSAF/, 'URSSAF'],
-        [/DGFIP/, 'DGFIP'],
-        [/ALMERYS/, 'Almerys'],
-        [/VIAMEDIS/, 'Viamedis'],
-        [/GRANDVISION/, 'GrandVision']
-    ];
-    const found = rules.find(([pattern]) => pattern.test(normalized));
-    return found ? found[1] : String(name || '').trim().slice(0, 80);
+    const source = String(name || '');
+    const normalized = normalizeThirdPartyName(source);
+    const upper = source.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const learned = getLearnedThirdPartyAliasV042(source);
+    if (learned && learned.mode === 'merge') return learned.canonical_name;
+
+    const rules = getThirdPartyIntelligenceRulesV042(false);
+    const found = rules.find(([pattern]) => pattern.test(upper) || pattern.test(normalized));
+    if (found) return found[1];
+
+    const cleaned = cleanThirdPartyLabel(source)
+        .replace(/^PISP\s+FINTE\s+/i, '')
+        .replace(/\s+(SAS|SARL|SA|EURL|SCI|SELARL)$/i, '')
+        .replace(/\b[A-F0-9]{12,}\b/gi, '')
+        .replace(/\b[A-Z]*\d{4,}[A-Z0-9]*\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return (cleaned || source || 'Non identifié').trim().slice(0, 80);
 }
 
 function cleanupThirdParties(companyId = null) {
@@ -1519,12 +2231,15 @@ function cleanupThirdParties(companyId = null) {
         groups.get(key).push({ ...row, canonical });
     });
 
+    let merged = 0;
+    let renamed = 0;
     const mergeTx = db.transaction(() => {
         groups.forEach(items => {
-            if (items.length === 0) return;
+            if (!items.length) return;
+            items.sort((a, b) => String(a.name || '').length - String(b.name || '').length || a.id - b.id);
             const keeper = items[0];
             const canonical = keeper.canonical || keeper.name;
-            db.prepare(`UPDATE third_parties SET name = ? WHERE id = ?`).run(canonical, keeper.id);
+            if (keeper.name !== canonical) renamed += db.prepare(`UPDATE third_parties SET name = ? WHERE id = ?`).run(canonical, keeper.id).changes;
 
             items.slice(1).forEach(duplicate => {
                 db.prepare(`
@@ -1533,20 +2248,45 @@ function cleanupThirdParties(companyId = null) {
                     WHERE third_party_id = ? OR third_party_name = ?
                 `).run(keeper.id, canonical, duplicate.id, duplicate.name);
                 db.prepare(`DELETE FROM third_parties WHERE id = ?`).run(duplicate.id);
+                merged += 1;
             });
 
             db.prepare(`
                 UPDATE bank_transactions
                 SET third_party_id = ?, third_party_name = ?
-                WHERE third_party_name IS NOT NULL
+                WHERE bank_account_id IN (SELECT id FROM bank_accounts WHERE company_id = ?)
+                AND third_party_name IS NOT NULL
                 AND third_party_name != ''
                 AND REPLACE(UPPER(third_party_name), ' ', '') = REPLACE(UPPER(?), ' ', '')
-            `).run(keeper.id, canonical, canonical);
+            `).run(keeper.id, canonical, keeper.company_id, canonical);
         });
     });
 
     mergeTx();
-    return rows.length;
+    return { scanned: rows.length, merged, renamed };
+}
+
+
+function updateThirdPartyTypeEverywhere(thirdPartyIds = [], type = 'autre') {
+    const ids = Array.isArray(thirdPartyIds) ? thirdPartyIds.map(Number).filter(Boolean) : [];
+    const cleanType = String(type || 'autre').trim() || 'autre';
+    if (!ids.length) return { updated: 0, transactionsUpdated: 0 };
+
+    const rows = db.prepare(`SELECT * FROM third_parties WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+    const keys = new Set(rows.map(row => normalizeThirdPartyName(getCanonicalThirdPartyName(row.name))).filter(Boolean));
+    if (!keys.size) return { updated: 0, transactionsUpdated: 0 };
+
+    const all = db.prepare(`SELECT id, name FROM third_parties`).all();
+    const targetIds = all
+        .filter(row => keys.has(normalizeThirdPartyName(getCanonicalThirdPartyName(row.name))))
+        .map(row => row.id);
+
+    if (!targetIds.length) return { updated: 0, transactionsUpdated: 0 };
+    const result = db.prepare(`UPDATE third_parties SET type = ? WHERE id IN (${targetIds.map(() => '?').join(',')})`).run(cleanType, ...targetIds);
+    const business = isMutuelleTypeV0423(cleanType)
+        ? applyBusinessRulesToThirdPartiesV0423({ thirdPartyIds: targetIds, force: true })
+        : { updated: 0 };
+    return { updated: result.changes || 0, transactionsUpdated: business.updated || 0 };
 }
 
 function updateThirdParty(thirdPartyId, name, type = 'autre', notes = '') {
@@ -1566,6 +2306,7 @@ function updateThirdParty(thirdPartyId, name, type = 'autre', notes = '') {
         WHERE third_party_id = ?
     `).run(canonical, thirdPartyId);
 
+    updateThirdPartyTypeEverywhere([thirdPartyId], type || current.type || 'autre');
     cleanupThirdParties(current.company_id);
     return true;
 }
@@ -1585,6 +2326,198 @@ function mergeThirdParties(sourceId, targetId) {
     });
     mergeTx();
     return true;
+}
+
+
+
+function getOrCreateThirdPartyExactV042(companyId, name, type = 'autre') {
+    if (!companyId || !name) return null;
+    const cleanName = String(name || '').trim().slice(0, 80);
+    const cleanType = String(type || 'autre').trim() || 'autre';
+    if (!cleanName) return null;
+
+    const existing = db.prepare(`
+        SELECT * FROM third_parties
+        WHERE company_id = ? AND UPPER(name) = UPPER(?)
+    `).get(companyId, cleanName);
+
+    if (existing) {
+        if ((existing.type || 'autre') !== cleanType) {
+            db.prepare(`UPDATE third_parties SET type = ? WHERE id = ?`).run(cleanType, existing.id);
+            return db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(existing.id);
+        }
+        return existing;
+    }
+
+    const result = db.prepare(`
+        INSERT INTO third_parties(company_id, name, type)
+        VALUES(?, ?, ?)
+    `).run(companyId, cleanName, cleanType);
+
+    return db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(result.lastInsertRowid);
+}
+
+function splitThirdPartyByKeywordV042(data = {}) {
+    const thirdPartyId = Number(data.thirdPartyId || 0);
+    const keyword = String(data.keyword || '').trim();
+    const newName = String(data.newName || '').trim();
+    const newType = String(data.type || 'autre').trim() || 'autre';
+    const neverMerge = Boolean(data.neverMerge);
+    if (!thirdPartyId || !keyword || !newName) return { ok: false, updated: 0, message: 'Paramètres incomplets.' };
+
+    const source = db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(thirdPartyId);
+    if (!source) return { ok: false, updated: 0, message: 'Tiers introuvable.' };
+
+    // Important : la dissociation doit créer le tiers exact demandé, sans repasser
+    // par la canonisation automatique. Sinon "MMA IARD Arnaudo" est immédiatement
+    // retransformé en "MMA IARD" puis refusionné, ce qui donnait un toast positif
+    // sans changement visible.
+    const target = getOrCreateThirdPartyExactV042(source.company_id, newName, newType);
+    if (!target) return { ok: false, updated: 0, message: 'Impossible de créer le tiers de destination.' };
+
+    const like = `%${keyword}%`;
+    const result = db.prepare(`
+        UPDATE bank_transactions
+        SET third_party_id = ?, third_party_name = ?
+        WHERE third_party_id = ?
+          AND UPPER(label) LIKE UPPER(?)
+    `).run(target.id, target.name, source.id, like);
+
+    const aliasKey = normalizeAliasKeyV042(keyword);
+    if (aliasKey) {
+        db.prepare(`
+            INSERT INTO third_party_split_exceptions(alias_key, alias_label, canonical_name)
+            VALUES(?, ?, ?)
+            ON CONFLICT(alias_key) DO UPDATE SET alias_label = excluded.alias_label, canonical_name = excluded.canonical_name
+        `).run(aliasKey, keyword, target.name);
+    }
+
+    // On mémorise l'exception comme alias exact, mais on ne lance PAS cleanupThirdParties()
+    // juste après : le nettoyage canonique regrouperait à nouveau le tiers dissocié.
+    saveThirdPartyAliasV042(keyword, target.name, newType, neverMerge ? 'split' : 'merge');
+
+    // Nettoyage léger : supprimer le tiers source s'il ne contient plus aucune opération.
+    const remaining = db.prepare(`SELECT COUNT(*) AS count FROM bank_transactions WHERE third_party_id = ?`).get(source.id).count || 0;
+    if (!remaining) db.prepare(`DELETE FROM third_parties WHERE id = ?`).run(source.id);
+
+    return { ok: true, updated: result.changes || 0, target };
+}
+
+
+
+// V0.43 - Moteur technique / Paramètres structurés
+function getTechnicalSettingsSnapshotV043(companyId = null) {
+    const companyFilter = companyId ? 'WHERE company_id = ?' : '';
+    const companyParams = companyId ? [companyId] : [];
+    const counts = {
+        companies: db.prepare('SELECT COUNT(*) AS count FROM companies').get().count || 0,
+        bankAccounts: db.prepare('SELECT COUNT(*) AS count FROM bank_accounts').get().count || 0,
+        statements: db.prepare('SELECT COUNT(*) AS count FROM statements').get().count || 0,
+        transactions: db.prepare('SELECT COUNT(*) AS count FROM bank_transactions').get().count || 0,
+        documents: db.prepare("SELECT COUNT(*) AS count FROM documents WHERE deleted_at IS NULL OR deleted_at = ''").get().count || 0,
+        thirdParties: db.prepare('SELECT COUNT(*) AS count FROM third_parties').get().count || 0,
+        aliases: db.prepare('SELECT COUNT(*) AS count FROM third_party_aliases').get().count || 0,
+        automationRules: db.prepare('SELECT COUNT(*) AS count FROM automation_rules').get().count || 0,
+        categoryRules: db.prepare('SELECT COUNT(*) AS count FROM category_rules').get().count || 0
+    };
+    const currentCompany = companyId ? {
+        transactions: db.prepare(`
+            SELECT COUNT(*) AS count
+            FROM bank_transactions t
+            JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            WHERE ba.company_id = ?
+        `).get(companyId).count || 0,
+        thirdParties: db.prepare('SELECT COUNT(*) AS count FROM third_parties WHERE company_id = ?').get(companyId).count || 0,
+        documents: db.prepare("SELECT COUNT(*) AS count FROM documents WHERE company_id = ? AND (deleted_at IS NULL OR deleted_at = '')").get(companyId).count || 0
+    } : null;
+    return { counts, currentCompany };
+}
+
+function getThirdPartyAliasesV043() {
+    return db.prepare(`
+        SELECT id, alias_label, canonical_name, type, mode, created_at
+        FROM third_party_aliases
+        ORDER BY canonical_name COLLATE NOCASE, alias_label COLLATE NOCASE
+    `).all();
+}
+
+function deleteThirdPartyAliasV043(aliasId) {
+    const id = Number(aliasId || 0);
+    if (!id) return { deleted: false };
+    const result = db.prepare('DELETE FROM third_party_aliases WHERE id = ?').run(id);
+    return { deleted: result.changes > 0 };
+}
+
+function getThirdPartyCanonicalListV043() {
+    const rows = db.prepare(`
+        SELECT
+            name,
+            COALESCE(NULLIF(type, ''), 'autre') AS type,
+            COUNT(DISTINCT company_id) AS companies_count,
+            COUNT(*) AS rows_count
+        FROM third_parties
+        GROUP BY LOWER(name)
+        ORDER BY name COLLATE NOCASE
+    `).all();
+    return rows;
+}
+
+function createOrUpdateCanonicalThirdPartyV043(data = {}) {
+    const name = String(data.name || '').trim();
+    const type = String(data.type || 'autre').trim() || 'autre';
+    if (!name) return { ok: false, message: 'Nom tiers obligatoire.' };
+    const existing = db.prepare('SELECT id FROM third_parties WHERE LOWER(name) = LOWER(?) LIMIT 1').get(name);
+    if (existing) {
+        db.prepare('UPDATE third_parties SET name = ?, type = ? WHERE LOWER(name) = LOWER(?)').run(name, type, name);
+        db.prepare('UPDATE bank_transactions SET third_party_name = ? WHERE LOWER(third_party_name) = LOWER(?)').run(name, name);
+    } else {
+        db.prepare('INSERT INTO third_parties(company_id, name, type) VALUES(NULL, ?, ?)').run(name, type);
+    }
+    return { ok: true };
+}
+
+function deleteCanonicalThirdPartyV043(name) {
+    const value = String(name || '').trim();
+    if (!value) return { deleted: false };
+    const result = db.prepare('DELETE FROM third_parties WHERE LOWER(name) = LOWER(?) AND company_id IS NULL').run(value);
+    return { deleted: result.changes > 0 };
+}
+
+function runTechnicalMaintenanceV043(data = {}) {
+    const companyId = data.companyId ? Number(data.companyId) : null;
+    const mode = String(data.mode || 'light');
+    const result = { mode, thirdPartiesBackfilled: 0, thirdPartiesCleaned: null, businessRules: null, orphanDocumentsCleaned: null };
+    if (mode === 'thirdParties' || mode === 'full' || mode === 'light') {
+        result.thirdPartiesBackfilled = backfillThirdParties(companyId);
+        result.thirdPartiesCleaned = cleanupThirdParties(companyId);
+    }
+    if (mode === 'businessRules' || mode === 'full' || mode === 'light') {
+        result.businessRules = applyBusinessRulesToThirdPartiesV0423({ companyId, force: false });
+    }
+    if (mode === 'documents' || mode === 'full') {
+        result.orphanDocumentsCleaned = cleanupOrphanDocumentLinks();
+    }
+    return result;
+}
+
+function saveThirdPartyAliasRuleV042(data = {}) {
+    const result = saveThirdPartyAliasV042(data.aliasLabel, data.canonicalName, data.type || 'autre', data.mode || 'merge');
+    if (result.ok) cleanupThirdParties(null);
+    return result;
+}
+
+function getThirdPartyAliasPreviewV042(thirdPartyId) {
+    const third = db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(Number(thirdPartyId || 0));
+    if (!third) return { aliases: [] };
+    const rows = db.prepare(`
+        SELECT label, COUNT(*) AS operations_count
+        FROM bank_transactions
+        WHERE third_party_id = ?
+        GROUP BY label
+        ORDER BY operations_count DESC, label ASC
+        LIMIT 80
+    `).all(third.id);
+    return { aliases: rows };
 }
 
 function renameDocument(documentId, newFilename) {
@@ -1614,7 +2547,7 @@ function renameDocument(documentId, newFilename) {
             const extension = path.extname(clean);
 
             while (fs.existsSync(finalPath) && path.resolve(finalPath) !== path.resolve(doc.filepath)) {
-                finalPath = path.join(dir, `${base}-${count}${extension}`);
+                finalPath = path.join(dir, `${base}_${String(count).padStart(2, '0')}${extension}`);
                 count += 1;
             }
 
@@ -1633,8 +2566,9 @@ function renameDocument(documentId, newFilename) {
         finalName = clean;
     }
 
-    db.prepare(`UPDATE documents SET filename = ?, filepath = ? WHERE id = ?`).run(finalName, finalPath, documentId);
-    addDocumentHistory(documentId, 'Renommé', finalName);
+    const originalName = doc.original_filename || doc.filename;
+    db.prepare(`UPDATE documents SET filename = ?, filepath = ?, original_filename = COALESCE(original_filename, ?), smart_filename = ?, smart_renamed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(finalName, finalPath, originalName, finalName, documentId);
+    addDocumentHistory(documentId, 'Renommé', `${originalName} → ${finalName}`);
     db.prepare(`UPDATE receipts SET filename = ?, filepath = ? WHERE filepath = ?`).run(finalName, finalPath, doc.filepath);
     return { ok: true, filename: finalName, filepath: finalPath };
 }
@@ -1657,34 +2591,278 @@ function deleteAutomationRule(ruleId) {
     return db.prepare(`DELETE FROM automation_rules WHERE id = ?`).run(ruleId);
 }
 
+function updateAutomationRule(ruleId, data = {}) {
+    return db.prepare(`
+        UPDATE automation_rules
+        SET company_id = ?, target = ?, keyword = ?, category = ?, status = ?, third_party_name = ?
+        WHERE id = ?
+    `).run(
+        data.companyId || null,
+        data.target || 'all',
+        data.keyword || '',
+        data.category || '',
+        data.status || '',
+        data.thirdPartyName || '',
+        ruleId
+    );
+}
+
+
+function normalizeAutomationTextV072(value = '') {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function addOrReinforceAutomationRuleV072(data = {}) {
+    const keyword = String(data.keyword || '').trim();
+    const category = String(data.category || '').trim();
+    const target = String(data.target || 'label').trim() || 'label';
+    const companyId = data.companyId || null;
+    if (!keyword || !category) return { ok: false, reason: 'missing_keyword_or_category' };
+
+    const existing = db.prepare(`
+        SELECT * FROM automation_rules
+        WHERE COALESCE(company_id, 0) = COALESCE(?, 0)
+        AND lower(target) = lower(?)
+        AND lower(keyword) = lower(?)
+        LIMIT 1
+    `).get(companyId, target, keyword);
+
+    if (existing) {
+        const nextUsage = Number(existing.usage_count || 0) + 1;
+        const nextConfidence = Math.min(100, Math.max(Number(existing.confidence || 25), 20) + 15);
+        db.prepare(`
+            UPDATE automation_rules
+            SET category = ?, status = COALESCE(NULLIF(?, ''), status), third_party_name = COALESCE(NULLIF(?, ''), third_party_name),
+                confidence = ?, usage_count = ?, updated_at = CURRENT_TIMESTAMP, last_used_at = CURRENT_TIMESTAMP,
+                source = COALESCE(NULLIF(source, ''), ?), is_active = 1,
+                auto_apply = CASE WHEN ? >= 85 THEN 1 ELSE COALESCE(auto_apply, 0) END
+            WHERE id = ?
+        `).run(category, data.status || '', data.thirdPartyName || '', nextConfidence, nextUsage, data.source || 'learning', nextConfidence, existing.id);
+        return { ok: true, id: existing.id, updated: true, confidence: nextConfidence, usageCount: nextUsage };
+    }
+
+    const result = db.prepare(`
+        INSERT INTO automation_rules(company_id, target, keyword, category, status, third_party_name, confidence, usage_count, source, is_active, auto_apply, updated_at, last_used_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(companyId, target, keyword, category, data.status || '', data.thirdPartyName || '', Number(data.confidence || 35), 1, data.source || 'learning');
+    return { ok: true, id: result.lastInsertRowid, created: true, confidence: Number(data.confidence || 35), usageCount: 1 };
+}
+
+function ruleMatchesTransactionV072(rule = {}, transaction = {}) {
+    if (!rule || Number(rule.is_active || 1) === 0 || !rule.keyword) return false;
+    const target = String(rule.target || 'label');
+    const haystack = target === 'account_name'
+        ? `${transaction.account_name || ''} ${transaction.bank_name || ''}`
+        : target === 'third_party_name'
+            ? `${transaction.third_party_name || ''}`
+            : target === 'all'
+                ? `${transaction.label || ''} ${transaction.account_name || ''} ${transaction.bank_name || ''} ${transaction.third_party_name || ''}`
+                : `${transaction.label || ''}`;
+    return normalizeAutomationTextV072(haystack).includes(normalizeAutomationTextV072(rule.keyword));
+}
+
+function getBankAutomationSuggestionsV072(data = {}) {
+    const companyId = data.companyId || null;
+    const bankAccountId = data.bankAccountId || null;
+    const filters = [];
+    const params = [];
+    if (companyId) { filters.push('ba.company_id = ?'); params.push(companyId); }
+    if (bankAccountId) { filters.push('t.bank_account_id = ?'); params.push(bankAccountId); }
+    filters.push("(t.category IS NULL OR t.category = '')");
+    const rows = db.prepare(`
+        SELECT t.id, t.label, t.amount, t.date_operation, t.category, t.status, t.third_party_name, ba.account_name, ba.bank_name, ba.company_id
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        WHERE ${filters.join(' AND ')}
+        ORDER BY t.id DESC
+        LIMIT 500
+    `).all(...params);
+    const rules = getAutomationRules(companyId).filter(rule => Number(rule.is_active || 1) !== 0 && rule.category);
+    const suggestions = [];
+    rows.forEach(row => {
+        const matches = rules
+            .filter(rule => ruleMatchesTransactionV072(rule, row))
+            .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0));
+        if (!matches.length) return;
+        const rule = matches[0];
+        suggestions.push({
+            transactionId: row.id,
+            label: row.label,
+            amount: row.amount,
+            dateOperation: row.date_operation,
+            suggestedCategory: rule.category,
+            suggestedStatus: rule.status || '',
+            suggestedThirdPartyName: rule.third_party_name || '',
+            confidence: Number(rule.confidence || 50),
+            ruleId: rule.id,
+            keyword: rule.keyword
+        });
+    });
+    return suggestions;
+}
+
+function applyBankAutomationSuggestionsV072(data = {}) {
+    const suggestions = Array.isArray(data.suggestions) && data.suggestions.length
+        ? data.suggestions
+        : getBankAutomationSuggestionsV072(data);
+    const ids = Array.isArray(data.transactionIds) && data.transactionIds.length ? new Set(data.transactionIds.map(Number)) : null;
+    let changed = 0;
+    const update = db.prepare(`
+        UPDATE bank_transactions
+        SET category = ?,
+            status = CASE WHEN ? <> '' THEN ? ELSE status END,
+            third_party_name = CASE WHEN ? <> '' THEN ? ELSE third_party_name END,
+            notes = TRIM(COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE '
+' END || ?)
+        WHERE id = ? AND (category IS NULL OR category = '')
+    `);
+    const bump = db.prepare(`UPDATE automation_rules SET usage_count = COALESCE(usage_count, 0) + 1, confidence = MIN(100, COALESCE(confidence, 50) + 5), last_used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+    const tx = db.transaction(() => {
+        suggestions.forEach(s => {
+            if (ids && !ids.has(Number(s.transactionId))) return;
+            const result = update.run(s.suggestedCategory || '', s.suggestedStatus || '', s.suggestedStatus || '', s.suggestedThirdPartyName || '', s.suggestedThirdPartyName || '', `Automatisation V0.72 : ${s.keyword || ''}`, s.transactionId);
+            if (result.changes) {
+                changed += result.changes;
+                if (s.ruleId) bump.run(s.ruleId);
+            }
+        });
+    });
+    tx();
+    return { changed, suggested: suggestions.length };
+}
+
+function getAutomationStatsV072(companyId = null) {
+    const ruleWhere = companyId ? 'WHERE company_id IS NULL OR company_id = ?' : '';
+    const params = companyId ? [companyId] : [];
+    const base = db.prepare(`
+        SELECT COUNT(*) AS rules,
+               AVG(COALESCE(confidence, 0)) AS avg_confidence,
+               SUM(CASE WHEN COALESCE(is_active, 1) = 1 THEN 1 ELSE 0 END) AS active_rules,
+               SUM(COALESCE(usage_count, 0)) AS usages
+        FROM automation_rules ${ruleWhere}
+    `).get(...params) || {};
+    const suggestions = getBankAutomationSuggestionsV072({ companyId }).length;
+    return {
+        rules: Number(base.rules || 0),
+        activeRules: Number(base.active_rules || 0),
+        averageConfidence: Math.round(Number(base.avg_confidence || 0)),
+        usages: Number(base.usages || 0),
+        pendingSuggestions: suggestions
+    };
+}
+
+function renameCategoryEverywhere(oldName, newName) {
+    const oldValue = String(oldName || '').trim();
+    const newValue = String(newName || '').trim();
+    if (!oldValue || !newValue || oldValue === newValue) return { changed: 0 };
+
+    const tx = db.transaction(() => {
+        const a = db.prepare(`UPDATE bank_transactions SET category = ? WHERE category = ?`).run(newValue, oldValue);
+        const b = db.prepare(`UPDATE automation_rules SET category = ? WHERE category = ?`).run(newValue, oldValue);
+        const c = db.prepare(`UPDATE category_rules SET category = ? WHERE category = ?`).run(newValue, oldValue);
+        return { changed: (a.changes || 0) + (b.changes || 0) + (c.changes || 0) };
+    });
+    return tx();
+}
+
+
+
+function updateCategoryUsage(oldName, mode = 'keep', newName = '') {
+    const oldValue = String(oldName || '').trim();
+    const replacement = String(newName || '').trim();
+    const action = String(mode || 'keep');
+    if (!oldValue) return { changed: 0 };
+    if (action === 'keep') return { changed: 0 };
+
+    const nextValue = action === 'replace' ? replacement : '';
+    if (action === 'replace' && !nextValue) return { changed: 0 };
+
+    const tx = db.transaction(() => {
+        const a = db.prepare(`UPDATE bank_transactions SET category = ? WHERE lower(category) = lower(?)`).run(nextValue, oldValue);
+        const b = db.prepare(`UPDATE automation_rules SET category = ? WHERE lower(category) = lower(?)`).run(nextValue, oldValue);
+        const c = db.prepare(`UPDATE category_rules SET category = ? WHERE lower(category) = lower(?)`).run(nextValue, oldValue);
+        return {
+            changed: (a.changes || 0) + (b.changes || 0) + (c.changes || 0),
+            transactions: a.changes || 0,
+            automationRules: b.changes || 0,
+            categoryRules: c.changes || 0
+        };
+    });
+    return tx();
+}
+
+function deleteCategoryRule(ruleId) {
+    return db.prepare(`DELETE FROM category_rules WHERE id = ?`).run(ruleId);
+}
+
 function applyAutomationRules(companyId = null) {
     const rules = getAutomationRules(companyId);
     let changed = 0;
 
     const update = db.prepare(`
         UPDATE bank_transactions
-        SET category = COALESCE(NULLIF(?, ''), category),
-            status = COALESCE(NULLIF(?, ''), status),
-            third_party_name = COALESCE(NULLIF(?, ''), third_party_name)
+        SET category = CASE
+                WHEN ? <> '' THEN ?
+                ELSE category
+            END,
+            status = CASE
+                WHEN ? <> '' AND (status IS NULL OR status = '' OR status = 'missing' OR status = 'review') THEN ?
+                ELSE status
+            END,
+            third_party_name = CASE
+                WHEN ? <> '' AND (third_party_name IS NULL OR third_party_name = '') THEN ?
+                ELSE third_party_name
+            END,
+            notes = TRIM(COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE '\n' END || ?)
         WHERE id = ?
     `);
 
     const rows = db.prepare(`
-        SELECT t.id, t.label, ba.account_name, ba.bank_name, ba.company_id
+        SELECT t.id, t.label, t.category, t.status, t.third_party_name, ba.account_name, ba.bank_name, ba.company_id
         FROM bank_transactions t
         LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
         ${companyId ? 'WHERE ba.company_id = ?' : ''}
     `).all(...(companyId ? [companyId] : []));
 
+    const normalize = value => String(value || '').toLowerCase();
+    const getHaystack = (row, target) => {
+        if (target === 'account_name') return `${row.account_name || ''} ${row.bank_name || ''}`;
+        if (target === 'label') return `${row.label || ''}`;
+        if (target === 'third_party_name') return `${row.third_party_name || ''}`;
+        return `${row.label || ''} ${row.account_name || ''} ${row.bank_name || ''} ${row.third_party_name || ''}`;
+    };
+
     const applyTx = db.transaction(() => {
         rows.forEach(row => {
-            const haystack = `${row.label || ''} ${row.account_name || ''} ${row.bank_name || ''}`.toLowerCase();
             rules.forEach(rule => {
                 if (!rule.keyword) return;
-                if (haystack.includes(String(rule.keyword).toLowerCase())) {
-                    update.run(rule.category || '', rule.status || '', rule.third_party_name || '', row.id);
-                    changed += 1;
-                }
+                const haystack = normalize(getHaystack(row, rule.target || 'all'));
+                if (!haystack.includes(normalize(rule.keyword))) return;
+
+                const shouldUpdateCategory = rule.category && (!row.category || row.category === '');
+                const shouldUpdateStatus = rule.status && (!row.status || row.status === '' || row.status === 'missing' || row.status === 'review');
+                const shouldUpdateThirdParty = rule.third_party_name && (!row.third_party_name || row.third_party_name === '');
+                if (!shouldUpdateCategory && !shouldUpdateStatus && !shouldUpdateThirdParty) return;
+
+                const note = `Règle auto : ${rule.keyword}`;
+                update.run(
+                    rule.category || '', rule.category || '',
+                    rule.status || '', rule.status || '',
+                    rule.third_party_name || '', rule.third_party_name || '',
+                    note,
+                    row.id
+                );
+                changed += 1;
+
+                if (shouldUpdateCategory) row.category = rule.category;
+                if (shouldUpdateStatus) row.status = rule.status;
+                if (shouldUpdateThirdParty) row.third_party_name = rule.third_party_name;
             });
         });
     });
@@ -1741,7 +2919,59 @@ function deleteDocumentPermanently(documentId) {
 }
 
 function updateDocumentType(documentId, docType) {
-    return db.prepare(`UPDATE documents SET doc_type = ? WHERE id = ?`).run(docType || 'facture', documentId);
+    const normalized = String(docType || 'facture').toLowerCase();
+    const inferred = inferDocumentNatureV0456(normalized);
+    const invoiceLike = ['facture', 'facture_client', 'avoir'].includes(normalized);
+    const amountLike = ['facture', 'facture_client', 'avoir', 'don', 'divers'].includes(normalized);
+    const doc = getDocument(documentId) || {};
+    const titleFallback = doc.document_title || doc.detected_supplier || doc.detected_reference || String(doc.filename || '').replace(/\.[^.]+$/, '');
+
+    const result = db.prepare(`
+        UPDATE documents
+        SET doc_type = ?,
+            accounting_impact = ?,
+            document_nature = ?,
+            invoice_number = CASE WHEN ? THEN invoice_number ELSE NULL END,
+            detected_reference = CASE WHEN ? THEN detected_reference ELSE NULL END,
+            due_date = CASE WHEN ? OR ? = 'contrat' THEN due_date ELSE NULL END,
+            planned_payment_date = CASE WHEN ? THEN planned_payment_date ELSE NULL END,
+            payment_method = CASE WHEN ? OR ? = 'don' THEN payment_method ELSE NULL END,
+            payment_schedule_json = CASE WHEN ? THEN payment_schedule_json ELSE NULL END,
+            amount_ht = CASE WHEN ? THEN amount_ht ELSE NULL END,
+            amount_tva = CASE WHEN ? THEN amount_tva ELSE NULL END,
+            amount_ttc = CASE WHEN ? THEN amount_ttc ELSE NULL END,
+            detected_amount = CASE WHEN ? THEN detected_amount ELSE NULL END,
+            vat_rate = CASE WHEN ? THEN vat_rate ELSE NULL END,
+            payment_status = CASE WHEN ? THEN payment_status ELSE 'not_required' END,
+            linked_transaction_id = CASE WHEN ? THEN linked_transaction_id ELSE NULL END,
+            status = CASE WHEN ? THEN status ELSE 'classified' END,
+            document_title = COALESCE(NULLIF(document_title, ''), ?)
+        WHERE id = ?
+    `).run(
+        normalized,
+        inferred.impact,
+        inferred.nature,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        normalized,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        normalized,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        amountLike ? 1 : 0,
+        amountLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        invoiceLike ? 1 : 0,
+        titleFallback,
+        documentId
+    );
+    addDocumentHistory(documentId, 'Type modifié', `Type = ${normalized}. Champs incompatibles supprimés automatiquement.`);
+    return result;
 }
 
 function moveDocumentToFolder(documentId, folderPath) {
@@ -1833,11 +3063,11 @@ function getDocumentSmartFolders(companyId = null) {
     return {
         favorites: docs.filter(doc => Number(doc.favorite || 0) === 1).length,
         unclassified: docs.filter(doc => !doc.company_id || !doc.folder_path).length,
-        invoices: docs.filter(doc => ['facture', 'avoir'].includes(doc.doc_type || 'facture')).length,
+        invoices: docs.filter(doc => ['facture', 'facture_client', 'avoir'].includes(doc.doc_type || 'facture')).length,
         statements: docs.filter(doc => doc.doc_type === 'releve').length,
         rib: docs.filter(doc => doc.doc_type === 'rib').length,
         contracts: docs.filter(doc => doc.doc_type === 'contrat').length,
-        unmatched: docs.filter(doc => doc.status !== 'matched' && !['releve', 'rib'].includes(doc.doc_type || '')).length,
+        unmatched: docs.filter(doc => doc.status !== 'matched' && ['facture','facture_client','avoir'].includes(doc.doc_type || 'facture')).length,
         duplicates: getDocumentDuplicates(companyId).length
     };
 }
@@ -1920,9 +3150,17 @@ function createCashSheet(data) {
             p4x_total,
             p10x_total,
             paylater_total,
-            ecart_total
+            ecart_total,
+            tva_brute,
+            discount_tva,
+            tva_nette,
+            cofidis_total,
+            amex_total,
+            bank_remise_cash,
+            bank_remise_check,
+            bank_remise_deferred_check
         )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         data.companyId || null,
         data.filename || '',
@@ -1949,7 +3187,15 @@ function createCashSheet(data) {
         Number(data.p4xTotal || 0),
         Number(data.p10xTotal || 0),
         Number(data.paylaterTotal || 0),
-        Number(data.ecartTotal || 0)
+        Number(data.ecartTotal || 0),
+        Number(data.tvaBrute || 0),
+        Number(data.discountTva || 0),
+        Number(data.tvaNette || data.tvaTotal || 0),
+        Number(data.cofidisTotal || 0),
+        Number(data.amexTotal || 0),
+        Number(data.bankRemiseCash || 0),
+        Number(data.bankRemiseCheck || 0),
+        Number(data.bankRemiseDeferredCheck || 0)
     );
 }
 
@@ -1964,8 +3210,64 @@ function getCashSheets(companyId = null) {
     `).all(...params);
 }
 
+function findCashSheetByCompanyPeriod(companyId = null, periodYear = '', periodMonth = '') {
+    const normalizedMonth = String(periodMonth || '').padStart(2, '0');
+    return db.prepare(`
+        SELECT *
+        FROM cash_sheets
+        WHERE COALESCE(company_id, 0) = COALESCE(?, 0)
+          AND period_year = ?
+          AND period_month = ?
+        ORDER BY imported_at DESC, id DESC
+        LIMIT 1
+    `).get(companyId || null, String(periodYear || ''), normalizedMonth);
+}
+
+function deleteCashSheetsByCompanyPeriod(companyId = null, periodYear = '', periodMonth = '') {
+    const normalizedMonth = String(periodMonth || '').padStart(2, '0');
+    return db.prepare(`
+        DELETE FROM cash_sheets
+        WHERE COALESCE(company_id, 0) = COALESCE(?, 0)
+          AND period_year = ?
+          AND period_month = ?
+    `).run(companyId || null, String(periodYear || ''), normalizedMonth);
+}
+
+function deleteCashSheet(cashSheetId) {
+    return db.prepare(`DELETE FROM cash_sheets WHERE id = ?`).run(cashSheetId);
+}
+
+function isCashSheetAmountPlausibleV0615(row = {}) {
+    const maxMonthlyCa = 500000;
+    const maxComponent = 250000;
+    const values = [
+        row.invoiced_ca,
+        row.net_ca_ttc,
+        row.net_ca_ht,
+        row.tva_nette,
+        row.tva_total,
+        row.card_total,
+        row.cash_total,
+        row.check_total,
+        row.cofidis_total,
+        row.p3x_total,
+        row.p4x_total,
+        row.p10x_total,
+        row.paylater_total,
+        row.tiers_payant,
+        row.acompte_total
+    ].map(value => Number(value || 0));
+
+    if (values.some(value => !Number.isFinite(value))) return false;
+    if (Math.abs(Number(row.net_ca_ttc || row.invoiced_ca || 0)) > maxMonthlyCa) return false;
+    if (values.some(value => Math.abs(value) > maxComponent)) return false;
+    return true;
+}
+
 function getCashSheetInsights(companyId = null) {
-    const rows = getCashSheets(companyId);
+    const allRows = getCashSheets(companyId);
+    const invalidRows = allRows.filter(row => !isCashSheetAmountPlausibleV0615(row));
+    const rows = allRows.filter(row => isCashSheetAmountPlausibleV0615(row));
 
     const sum = (field) => rows.reduce((acc, row) => acc + Number(row[field] || 0), 0);
 
@@ -1980,7 +3282,14 @@ function getCashSheetInsights(companyId = null) {
     const totalTransfer = sum('transfer_total');
     const totalTiersPayant = sum('tiers_payant');
     const totalAcomptes = sum('acompte_total');
-    const totalFinancing = sum('p3x_total') + sum('p4x_total') + sum('p10x_total') + sum('paylater_total');
+    const totalTvaBrute = sum('tva_brute');
+    const totalDiscountTva = sum('discount_tva');
+    const totalTvaNette = sum('tva_nette') || Math.max(0, totalTvaBrute - totalDiscountTva) || Math.max(0, totalNetTtc - totalNetHt);
+    const totalFinancing = sum('cofidis_total') || (sum('p3x_total') + sum('p4x_total') + sum('p10x_total') + sum('paylater_total'));
+    const totalAmex = sum('amex_total');
+    const totalBankRemiseCash = sum('bank_remise_cash');
+    const totalBankRemiseCheck = sum('bank_remise_check');
+    const totalBankRemiseDeferredCheck = sum('bank_remise_deferred_check');
     const totalEcarts = sum('ecart_total');
 
     const byMonth = {};
@@ -1995,8 +3304,24 @@ function getCashSheetInsights(companyId = null) {
                 discount_ht: 0,
                 net_ca_ht: 0,
                 net_ca_ttc: 0,
+                tva_brute: 0,
+                discount_tva: 0,
+                tva_nette: 0,
                 invoiced_ca: 0,
                 encaissements: 0,
+                cash_total: 0,
+                card_total: 0,
+                check_total: 0,
+                transfer_total: 0,
+                amex_total: 0,
+                cofidis_total: 0,
+                p3x_total: 0,
+                p4x_total: 0,
+                p10x_total: 0,
+                paylater_total: 0,
+                bank_remise_cash: 0,
+                bank_remise_check: 0,
+                bank_remise_deferred_check: 0,
                 tiers_payant: 0,
                 acomptes: 0,
                 ecarts: 0,
@@ -2007,14 +3332,38 @@ function getCashSheetInsights(companyId = null) {
         const gross = Number(row.gross_ca_ht || 0);
         const discount = Number(row.discount_ht || 0);
         const netHt = Number(row.net_ca_ht || (gross - discount) || 0);
-        const netTtc = Number(row.net_ca_ttc || netHt * 1.2 || row.invoiced_ca || 0);
+        const tvaBrute = Number(row.tva_brute || 0);
+        const discountTva = Number(row.discount_tva || 0);
+        const tvaNette = Number(row.tva_nette || (tvaBrute - discountTva) || Math.max(0, Number(row.net_ca_ttc || 0) - netHt) || 0);
+        const netTtc = Number(row.net_ca_ttc || (netHt + tvaNette) || row.invoiced_ca || 0);
 
         byMonth[key].gross_ca_ht += gross;
         byMonth[key].discount_ht += discount;
         byMonth[key].net_ca_ht += netHt;
         byMonth[key].net_ca_ttc += netTtc;
+        byMonth[key].tva_brute += tvaBrute;
+        byMonth[key].discount_tva += discountTva;
+        byMonth[key].tva_nette += tvaNette;
+        const cashAmount = Number(row.cash_total || 0);
+        const cardAmount = Number(row.card_total || 0);
+        const checkAmount = Number(row.check_total || 0);
+        const transferAmount = Number(row.transfer_total || 0);
         byMonth[key].invoiced_ca += netTtc;
-        byMonth[key].encaissements += Number(row.cash_total || 0) + Number(row.card_total || 0) + Number(row.check_total || 0) + Number(row.transfer_total || 0);
+        byMonth[key].cash_total += cashAmount;
+        byMonth[key].card_total += cardAmount;
+        byMonth[key].check_total += checkAmount;
+        byMonth[key].transfer_total += transferAmount;
+        byMonth[key].amex_total += Number(row.amex_total || 0);
+        byMonth[key].p3x_total += Number(row.p3x_total || 0);
+        byMonth[key].p4x_total += Number(row.p4x_total || 0);
+        byMonth[key].p10x_total += Number(row.p10x_total || 0);
+        byMonth[key].paylater_total += Number(row.paylater_total || 0);
+        const cofidisFromDetails = Number(row.p3x_total || 0) + Number(row.p4x_total || 0) + Number(row.p10x_total || 0) + Number(row.paylater_total || 0);
+        byMonth[key].cofidis_total += cofidisFromDetails || Number(row.cofidis_total || 0);
+        byMonth[key].bank_remise_cash += Number(row.bank_remise_cash || 0);
+        byMonth[key].bank_remise_check += Number(row.bank_remise_check || 0);
+        byMonth[key].bank_remise_deferred_check += Number(row.bank_remise_deferred_check || 0);
+        byMonth[key].encaissements += cashAmount + cardAmount + checkAmount + transferAmount;
         byMonth[key].tiers_payant += Number(row.tiers_payant || 0);
         byMonth[key].acomptes += Number(row.acompte_total || 0);
         byMonth[key].ecarts += Number(row.ecart_total || 0);
@@ -2035,6 +3384,9 @@ function getCashSheetInsights(companyId = null) {
         totalDiscountHt,
         totalNetHt,
         totalNetTtc,
+        totalTvaBrute,
+        totalDiscountTva,
+        totalTvaNette,
         discountRate: totalGrossHt ? (totalDiscountHt / totalGrossHt) * 100 : 0,
         totalCash,
         totalCard,
@@ -2043,13 +3395,63 @@ function getCashSheetInsights(companyId = null) {
         totalTiersPayant,
         totalAcomptes,
         totalFinancing,
+        totalAmex,
+        totalBankRemiseCash,
+        totalBankRemiseCheck,
+        totalBankRemiseDeferredCheck,
         totalEcarts,
         variationNetTtc,
         byMonth: months.slice(-12),
-        recent: rows.slice(0, 10),
+        recent: allRows.slice(0, 12),
+        invalidRows,
+        ignoredInvalidCount: invalidRows.length,
         lastMonth,
         previousMonth
     };
+}
+
+function deleteInvalidCashSheetsV070(companyId = null) {
+    const rows = getCashSheets(companyId).filter(row => !isCashSheetAmountPlausibleV0615(row));
+    const tx = db.transaction(() => {
+        rows.forEach(row => {
+            db.prepare(`DELETE FROM cash_sheets WHERE id = ?`).run(row.id);
+        });
+    });
+    tx();
+    return { deleted: rows.length, ids: rows.map(row => row.id) };
+}
+
+function deriveCategoryRuleKeywordV070(label = '') {
+    const normalized = String(label || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\b\d{2,}\b/g, ' ')
+        .replace(/\bFR[0-9A-Z]{8,}\b/gi, ' ')
+        .replace(/[^a-zA-Z ]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const words = normalized.split(' ').filter(word => word.length >= 4);
+    return words.slice(0, 3).join(' ') || normalized.slice(0, 40);
+}
+
+function learnCategoryFromTransactionV070(transactionId, category = '') {
+    const cleanCategory = String(category || '').trim();
+    if (!transactionId || !cleanCategory) return { learned: false };
+    const row = getTransaction(transactionId);
+    if (!row || !row.label) return { learned: false };
+    const keyword = deriveCategoryRuleKeywordV070(row.label);
+    if (!keyword || keyword.length < 4) return { learned: false };
+    addCategoryRule(keyword, cleanCategory);
+    const learnedRule = addOrReinforceAutomationRuleV072({
+        companyId: row.company_id || null,
+        target: 'label',
+        keyword,
+        category: cleanCategory,
+        status: 'verified',
+        source: 'bank_category_learning'
+    });
+    return { learned: true, keyword, category: cleanCategory, automationRule: learnedRule };
 }
 
 function getPreviousMonthPeriod() {
@@ -2084,6 +3486,57 @@ function getCashSheetReminders() {
     });
 }
 
+
+function statementSignedBalance(row) {
+    if (!row || row.new_balance === null || row.new_balance === undefined) return null;
+    const value = Number(row.new_balance || 0);
+    const type = String(row.balance_type || '').toLowerCase();
+    if (type.includes('déb') || type.includes('deb')) return -Math.abs(value);
+    return Math.abs(value);
+}
+
+function getLatestStatementBalanceForAccount(bankAccountId) {
+    const statement = db.prepare(`
+        SELECT *
+        FROM statements
+        WHERE bank_account_id = ?
+        AND new_balance IS NOT NULL
+        ORDER BY
+            COALESCE(statement_year, '') DESC,
+            COALESCE(statement_month, '') DESC,
+            imported_at DESC,
+            id DESC
+        LIMIT 1
+    `).get(bankAccountId);
+
+    const balance = statementSignedBalance(statement);
+    return {
+        statement,
+        balance: balance === null ? 0 : balance,
+        hasStatementBalance: balance !== null
+    };
+}
+
+function getLatestStatementsTreasury(companyId) {
+    const accounts = getBankAccounts(companyId);
+    const rows = accounts.map(account => {
+        const latest = getLatestStatementBalanceForAccount(account.id);
+        return {
+            account,
+            statement: latest.statement || null,
+            balance: latest.balance,
+            hasStatementBalance: latest.hasStatementBalance
+        };
+    });
+
+    return {
+        total: rows.reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        accounts: rows,
+        accountsWithBalance: rows.filter(row => row.hasStatementBalance).length,
+        accountsCount: rows.length
+    };
+}
+
 function getCompanyDashboard(companyId) {
     const company = db.prepare(`SELECT * FROM companies WHERE id = ?`).get(companyId);
     if (!company) return null;
@@ -2092,12 +3545,16 @@ function getCompanyDashboard(companyId) {
     const accountSummaries = accounts.map(account => {
         const summary = getTransactionSummary(account.id, {});
         const insights = getDashboardInsights(account.id, {});
-        const balance = Number(summary.credit || 0) + Number(summary.debit || 0);
+        const latestTreasury = getLatestStatementBalanceForAccount(account.id);
+        const fallbackBalance = Number(summary.credit || 0) + Number(summary.debit || 0);
+        const balance = latestTreasury.hasStatementBalance ? latestTreasury.balance : fallbackBalance;
         return {
             account,
             summary,
             insights,
-            balance
+            balance,
+            latestStatement: latestTreasury.statement || null,
+            hasStatementBalance: latestTreasury.hasStatementBalance
         };
     });
 
@@ -2135,12 +3592,1788 @@ function getCompanyDashboard(companyId) {
         company,
         accounts: accountSummaries,
         totals,
+        treasury: getLatestStatementsTreasury(companyId),
         categories: [...categoryTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, amount]) => ({ name, amount })),
         suppliers: [...supplierTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, amount]) => ({ name, amount })),
         cash
     };
 }
 
+
+// ===========================
+// Focus Compta V0.45 - Moteur de rapprochement intelligent
+// ===========================
+function isoDateValueV045(value) {
+    const text = String(value || '').trim();
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00`).getTime();
+    const fr = text.match(/^(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?/);
+    if (fr) {
+        const year = fr[3] ? (fr[3].length === 2 ? `20${fr[3]}` : fr[3]) : String(new Date().getFullYear());
+        return new Date(`${year}-${String(fr[2]).padStart(2,'0')}-${String(fr[1]).padStart(2,'0')}T00:00:00`).getTime();
+    }
+    const d = Date.parse(text);
+    return Number.isFinite(d) ? d : null;
+}
+
+function dateDeltaDaysV045(a, b) {
+    const av = isoDateValueV045(a);
+    const bv = isoDateValueV045(b);
+    if (av === null || bv === null) return null;
+    return Math.abs(Math.round((av - bv) / 86400000));
+}
+
+function scoreDocumentTransactionV045(doc, row) {
+    const docAmount = Number(doc.amount_ttc || doc.detected_amount || 0);
+    const txAmount = Math.abs(Number(row.amount || 0));
+    const amountDelta = docAmount > 0 ? Math.abs(txAmount - Math.abs(docAmount)) : null;
+    const docText = normalizeSearchText([doc.filename, doc.detected_supplier, doc.third_party_name, doc.detected_reference, doc.invoice_number].join(' '));
+    const txText = normalizeSearchText([row.label, row.third_party_name, row.category, row.notes].join(' '));
+    const tokens = docText.split(' ').filter(t => t.length >= 4).slice(0, 8);
+    let score = 0;
+    const reasons = [];
+
+    if (amountDelta !== null) {
+        if (amountDelta < 0.01) { score += 60; reasons.push('montant exact'); }
+        else if (amountDelta <= 1) { score += 38; reasons.push('montant proche'); }
+        else if (amountDelta <= Math.max(5, Math.abs(docAmount) * 0.02)) { score += 20; reasons.push('montant plausible'); }
+    }
+
+    tokens.forEach(token => {
+        if (txText.includes(token)) {
+            const points = token.length >= 7 ? 10 : 5;
+            score += points;
+            if (reasons.length < 4) reasons.push(`mot-clé ${token}`);
+        }
+    });
+
+    const days = dateDeltaDaysV045(doc.invoice_date || doc.detected_date || doc.added_at, row.date_operation);
+    if (days !== null) {
+        if (days <= 3) { score += 18; reasons.push('date proche'); }
+        else if (days <= 15) { score += 10; reasons.push('date cohérente'); }
+        else if (days <= 45) { score += 4; reasons.push('date acceptable'); }
+    }
+
+    if ((row.receipts_count || 0) === 0) { score += 8; reasons.push('opération sans justificatif'); }
+    if (String(row.status || '').toLowerCase() === 'verified') score -= 10;
+
+    return {
+        ...row,
+        match_score: Math.max(0, Math.min(100, Math.round(score))),
+        amount_delta: amountDelta,
+        match_reasons: reasons.join(', ')
+    };
+}
+
+function getSmartDocumentMatchesV045(companyId, documentId, limit = 10) {
+    const doc = getDocument(documentId);
+    if (!doc) return [];
+    const rows = db.prepare(`
+        SELECT t.*, s.filename AS statement_filename, s.filepath AS statement_filepath, ba.company_id, COUNT(r.id) AS receipts_count
+        FROM bank_transactions t
+        LEFT JOIN statements s ON s.id = t.statement_id
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN receipts r ON r.transaction_id = t.id
+        WHERE ba.company_id = ?
+        GROUP BY t.id
+        ORDER BY t.id DESC
+        LIMIT 1500
+    `).all(companyId);
+    return rows
+        .map(row => scoreDocumentTransactionV045(doc, row))
+        .filter(row => row.match_score >= 15)
+        .sort((a, b) => b.match_score - a.match_score || (a.amount_delta || 999999) - (b.amount_delta || 999999))
+        .slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)));
+}
+
+function autoReconcileDocumentsV045(companyId, threshold = 95, limit = 200) {
+    const docs = getDocuments(companyId, { status: 'unmatched' })
+        .filter(doc => ['facture','facture_client','avoir'].includes(String(doc.doc_type || 'facture').toLowerCase()))
+        .slice(0, Math.max(1, Math.min(Number(limit) || 200, 1000)));
+    let linked = 0;
+    const details = [];
+    for (const doc of docs) {
+        const matches = getSmartDocumentMatchesV045(companyId, doc.id, 1);
+        const best = matches[0];
+        if (best && Number(best.match_score || 0) >= Number(threshold || 95)) {
+            const result = linkDocumentToTransaction(doc.id, best.id);
+            if (result && result.ok !== false) {
+                linked += 1;
+                details.push({ documentId: doc.id, document: doc.filename, transactionId: best.id, score: best.match_score, amount: best.amount });
+            }
+        }
+    }
+    return { ok: true, scanned: docs.length, linked, details };
+}
+
+function getAccountingAlertsV045(companyId) {
+    const params = [companyId];
+    const unmatchedDocuments = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND COALESCE(status, '') != 'matched'
+        AND COALESCE(doc_type, 'facture') IN ('facture','facture_client','avoir')
+    `).get(...params).count || 0;
+
+    const unpaidInvoices = db.prepare(`
+        SELECT COUNT(*) AS count, COALESCE(SUM(COALESCE(amount_ttc, detected_amount, 0)),0) AS total
+        FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND COALESCE(doc_type, 'facture') = 'facture'
+        AND COALESCE(status, '') != 'matched'
+    `).get(...params);
+
+    const today = new Date().toISOString().slice(0,10);
+    const overdueInvoices = db.prepare(`
+        SELECT COUNT(*) AS count, COALESCE(SUM(COALESCE(amount_ttc, detected_amount, 0)),0) AS total
+        FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND COALESCE(doc_type, 'facture') = 'facture'
+        AND COALESCE(status, '') != 'matched'
+        AND due_date IS NOT NULL AND due_date != '' AND due_date < ?
+    `).get(companyId, today);
+
+    const missingReceipts = db.prepare(`
+        SELECT COUNT(*) AS count, COALESCE(SUM(ABS(t.amount)),0) AS total
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN receipts r ON r.transaction_id = t.id
+        WHERE ba.company_id = ?
+        AND COALESCE(t.status, 'missing') != 'verified'
+        AND r.id IS NULL
+    `).get(companyId);
+
+    const vat = db.prepare(`
+        SELECT
+            COALESCE(SUM(CASE WHEN COALESCE(amount_tva,0) > 0 THEN amount_tva ELSE 0 END),0) AS deductible,
+            COALESCE(SUM(CASE WHEN COALESCE(amount_ttc, detected_amount,0) < 0 THEN ABS(amount_tva) ELSE 0 END),0) AS collected,
+            COUNT(CASE WHEN amount_tva IS NULL AND COALESCE(doc_type,'facture') = 'facture' THEN 1 END) AS missingVatCount
+        FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+    `).get(companyId);
+
+    const thirdPartyReceived = db.prepare(`
+        SELECT COALESCE(SUM(t.amount),0) AS total, COUNT(*) AS count
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        WHERE ba.company_id = ?
+        AND t.amount > 0
+        AND LOWER(REPLACE(COALESCE(t.category,''), '-', ' ')) LIKE '%tiers payant%'
+    `).get(companyId);
+
+    return {
+        unmatchedDocuments,
+        unpaidInvoices: { count: unpaidInvoices.count || 0, total: unpaidInvoices.total || 0 },
+        overdueInvoices: { count: overdueInvoices.count || 0, total: overdueInvoices.total || 0 },
+        missingReceipts: { count: missingReceipts.count || 0, total: missingReceipts.total || 0 },
+        vat: { deductible: vat.deductible || 0, collected: vat.collected || 0, missingVatCount: vat.missingVatCount || 0 },
+        thirdPartyReceived: { count: thirdPartyReceived.count || 0, total: thirdPartyReceived.total || 0 }
+    };
+}
+
+function normalize_text_for_like(value) {
+    return normalizeSearchText(value).replace(/-/g, ' ');
+}
+
+function getReconciliationDashboardV045(companyId) {
+    const alerts = getAccountingAlertsV045(companyId);
+    const nextDue = db.prepare(`
+        SELECT id, filename, detected_supplier, due_date, COALESCE(amount_ttc, detected_amount, 0) AS amount
+        FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND COALESCE(doc_type, 'facture') = 'facture'
+        AND COALESCE(status, '') != 'matched'
+        ORDER BY CASE WHEN due_date IS NULL OR due_date = '' THEN 1 ELSE 0 END, due_date ASC, id DESC
+        LIMIT 10
+    `).all(companyId);
+    return { alerts, nextDue };
+}
+
+
+function normalizeDocumentSupplierV0452(value = '') {
+    return String(value || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/^(sas|sarl|sa|eurl|selarl)\s+/i, '')
+        .replace(/\s+(sas|sarl|sa|eurl|selarl)$/i, '')
+        .trim();
+}
+
+
+function inferDocumentNatureV0456(docType) {
+    const t = String(docType || 'facture').toLowerCase();
+    if (['releve','rib','contrat','administratif','informatif'].includes(t)) return { nature: t === 'releve' ? 'banque' : t === 'informatif' ? 'informatif' : 'administratif', impact: 'no' };
+    if (t === 'don' || t === 'divers') return { nature: 'comptable', impact: 'yes' };
+    return { nature: 'comptable', impact: 'yes' };
+}
+
+function updateDocumentAccountingV0452(data = {}) {
+    const documentId = Number(data.documentId || data.id || 0);
+    if (!documentId) throw new Error('documentId manquant');
+
+    const supplier = normalizeDocumentSupplierV0452(data.detectedSupplier || data.supplier || '');
+    const amountHt = data.amountHt === '' || data.amountHt === undefined ? null : Number(data.amountHt);
+    const amountTva = data.amountTva === '' || data.amountTva === undefined ? null : Number(data.amountTva);
+    const amountTtc = data.amountTtc === '' || data.amountTtc === undefined ? null : Number(data.amountTtc);
+    const vatRate = data.vatRate === '' || data.vatRate === undefined ? null : Number(data.vatRate);
+    const validationStatus = data.validationStatus || 'validated';
+    const paymentStatus = data.paymentStatus || 'unknown';
+    const docTypeForNature = data.docType || data.doc_type || 'facture';
+    const inferredNature = inferDocumentNatureV0456(docTypeForNature);
+    const accountingImpact = data.accountingImpact || data.accounting_impact || inferredNature.impact;
+    const documentNature = data.documentNature || data.document_nature || inferredNature.nature;
+    const normalizedType = String(data.docType || data.doc_type || 'facture').toLowerCase();
+    const invoiceTypes = ['facture', 'facture_client', 'avoir'];
+    const amountTypes = ['facture', 'facture_client', 'avoir'];
+    const isInvoiceLike = invoiceTypes.includes(normalizedType);
+    const keepsAmounts = amountTypes.includes(normalizedType);
+    const cleanInvoiceNumber = isInvoiceLike ? (data.invoiceNumber || data.detectedReference || '') : '';
+    const cleanDueDate = isInvoiceLike ? (data.dueDate || '') : '';
+    const cleanAmountHt = isInvoiceLike && Number.isFinite(amountHt) ? amountHt : null;
+    const cleanAmountTva = isInvoiceLike && Number.isFinite(amountTva) ? amountTva : null;
+    const cleanAmountTtc = keepsAmounts && Number.isFinite(amountTtc) ? amountTtc : null;
+    const cleanVatRate = isInvoiceLike && Number.isFinite(vatRate) ? vatRate : null;
+    const cleanPaymentStatus = isInvoiceLike ? paymentStatus : 'not_required';
+    const cleanPlannedPaymentDate = isInvoiceLike ? (data.plannedPaymentDate || data.planned_payment_date || '') : '';
+    const cleanPaymentMethod = isInvoiceLike || normalizedType === 'don' ? (data.paymentMethod || data.payment_method || '') : '';
+    const cleanPaymentSchedule = isInvoiceLike ? (data.paymentScheduleJson || data.payment_schedule_json || '') : '';
+    const cleanTitle = String(data.documentTitle || data.document_title || data.title || '').trim();
+    const cleanNotes = String(data.documentNotes || data.document_notes || data.notes || '').trim();
+
+    db.prepare(`
+        UPDATE documents
+        SET
+            doc_type = ?,
+            detected_supplier = ?,
+            third_party_name = ?,
+            detected_reference = ?,
+            invoice_number = ?,
+            detected_date = ?,
+            invoice_date = ?,
+            due_date = ?,
+            detected_amount = ?,
+            amount_ht = ?,
+            amount_tva = ?,
+            amount_ttc = ?,
+            vat_rate = ?,
+            payment_status = ?,
+            validation_status = ?,
+            planned_payment_date = ?,
+            payment_method = ?,
+            payment_schedule_json = ?,
+            ocr_quality_status = ?,
+            accounting_impact = ?,
+            document_nature = ?,
+            document_title = ?,
+            document_notes = ?
+        WHERE id = ?
+    `).run(
+        normalizedType,
+        supplier,
+        supplier,
+        cleanInvoiceNumber,
+        cleanInvoiceNumber,
+        data.invoiceDate || data.detectedDate || '',
+        data.invoiceDate || data.detectedDate || '',
+        cleanDueDate,
+        cleanAmountTtc,
+        cleanAmountHt,
+        cleanAmountTva,
+        cleanAmountTtc,
+        cleanVatRate,
+        cleanPaymentStatus,
+        validationStatus,
+        cleanPlannedPaymentDate,
+        cleanPaymentMethod,
+        cleanPaymentSchedule,
+        data.ocrQualityStatus || data.ocr_quality_status || validationStatus,
+        accountingImpact,
+        documentNature,
+        cleanTitle,
+        cleanNotes,
+        documentId
+    );
+
+    return getDocument(documentId);
+}
+
+
+function saveUserLearningEvent(data = {}) {
+    const companyId = data.companyId || data.company_id || null;
+    const eventType = String(data.eventType || data.event_type || '').trim();
+    const entityType = String(data.entityType || data.entity_type || '').trim();
+    if (!eventType || !entityType) return { ok: false, reason: 'eventType/entityType manquant' };
+    const entityId = data.entityId === undefined || data.entityId === null ? '' : String(data.entityId);
+    const sourceValue = data.sourceValue === undefined || data.sourceValue === null ? '' : String(data.sourceValue).slice(0, 500);
+    const targetValue = data.targetValue === undefined || data.targetValue === null ? '' : String(data.targetValue).slice(0, 500);
+    const payloadJson = JSON.stringify(data.payload || {});
+    const result = db.prepare(`
+        INSERT INTO user_learning_events(company_id, event_type, entity_type, entity_id, source_value, target_value, payload_json)
+        VALUES(?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(company_id, event_type, entity_type, entity_id, source_value, target_value)
+        DO UPDATE SET payload_json = excluded.payload_json, created_at = CURRENT_TIMESTAMP
+    `).run(companyId, eventType, entityType, entityId, sourceValue, targetValue, payloadJson);
+    return { ok: true, changes: result.changes };
+}
+
+function getUserLearningEvents(data = {}) {
+    const where = [];
+    const params = [];
+    if (data.companyId || data.company_id) { where.push('(company_id = ? OR company_id IS NULL)'); params.push(data.companyId || data.company_id); }
+    if (data.eventType || data.event_type) { where.push('event_type = ?'); params.push(data.eventType || data.event_type); }
+    if (data.entityType || data.entity_type) { where.push('entity_type = ?'); params.push(data.entityType || data.entity_type); }
+    return db.prepare(`
+        SELECT *
+        FROM user_learning_events
+        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        ORDER BY created_at DESC
+        LIMIT 500
+    `).all(...params);
+}
+
+function saveDocumentLearningRuleV0452(data = {}) {
+    const supplier = normalizeDocumentSupplierV0452(data.supplier || data.detectedSupplier || '');
+    const fieldName = String(data.fieldName || '').trim();
+    if (!supplier || !fieldName) return { changes: 0 };
+    const companyId = data.companyId || null;
+    const keyword = String(data.keyword || supplier).trim().toLowerCase();
+    const learnedValue = data.learnedValue === undefined || data.learnedValue === null ? '' : String(data.learnedValue);
+    const sourceLabel = String(data.sourceLabel || '').slice(0, 500);
+
+    return db.prepare(`
+        INSERT INTO document_learning_rules(company_id, supplier, field_name, learned_value, keyword, source_label, active, usage_count)
+        VALUES(?, ?, ?, ?, ?, ?, 1, 0)
+        ON CONFLICT(company_id, supplier, field_name, keyword)
+        DO UPDATE SET learned_value = excluded.learned_value, source_label = excluded.source_label, active = 1, updated_at = CURRENT_TIMESTAMP
+    `).run(companyId, supplier, fieldName, learnedValue, keyword, sourceLabel);
+}
+
+function saveDocumentLearningRulesV0452(data = {}) {
+    const rules = Array.isArray(data.rules) ? data.rules : [];
+    const tx = db.transaction(() => {
+        let count = 0;
+        for (const rule of rules) {
+            const result = saveDocumentLearningRuleV0452({ ...rule, companyId: data.companyId ?? rule.companyId });
+            count += result.changes || 0;
+        }
+        return count;
+    });
+    return { saved: tx() };
+}
+
+function getDocumentLearningRulesV0452(data = {}) {
+    const companyId = data.companyId || null;
+    const supplier = normalizeDocumentSupplierV0452(data.supplier || '');
+    const where = ['active = 1'];
+    const params = [];
+    if (companyId) { where.push('(company_id = ? OR company_id IS NULL)'); params.push(companyId); }
+    if (supplier) { where.push('LOWER(supplier) = LOWER(?)'); params.push(supplier); }
+    return db.prepare(`
+        SELECT *
+        FROM document_learning_rules
+        WHERE ${where.join(' AND ')}
+        ORDER BY supplier COLLATE NOCASE, field_name COLLATE NOCASE, updated_at DESC
+    `).all(...params);
+}
+
+function deleteDocumentLearningRuleV0452(id) {
+    return db.prepare('UPDATE document_learning_rules SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(Number(id));
+}
+
+function applyDocumentLearningToAnalysisV0452(analysis = {}, companyId = null) {
+    const supplier = normalizeDocumentSupplierV0452(analysis.detectedSupplier || analysis.supplier || '');
+    if (!supplier) return analysis;
+    const rules = getDocumentLearningRulesV0452({ companyId, supplier });
+    if (!rules.length) return analysis;
+    const next = { ...analysis, learningApplied: true };
+    // Sécurité V0.45.2 : on applique automatiquement uniquement l'identité fournisseur.
+    // Les corrections de montants/dates sont mémorisées et visibles dans Paramètres,
+    // mais ne sont pas recopiées comme valeurs fixes sur une facture suivante.
+    // Elles serviront à enrichir les heuristiques sans créer de fausses écritures.
+    for (const rule of rules) {
+        if (['supplier', 'detectedSupplier'].includes(rule.field_name)) {
+            next.detectedSupplier = rule.learned_value;
+        }
+    }
+    rules.forEach(rule => db.prepare('UPDATE document_learning_rules SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rule.id));
+    return next;
+}
+
+function getDocumentsToValidateV0452(companyId = null) {
+    const where = [`(deleted_at IS NULL OR deleted_at = '')`, `COALESCE(validation_status, 'pending') != 'validated'`];
+    const params = [];
+    if (companyId) { where.push('company_id = ?'); params.push(companyId); }
+    return db.prepare(`
+        SELECT *
+        FROM documents
+        WHERE ${where.join(' AND ')}
+        ORDER BY added_at DESC, id DESC
+        LIMIT 200
+    `).all(...params);
+}
+
+
+// V0.45.6 : rapprochements multiples, exports comptables et archives mensuelles.
+function safeFilenameV0456(value, fallback = 'document') {
+    const clean = String(value || fallback)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 140);
+    return clean || fallback;
+}
+
+function parseAccountingDateV0456(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    let m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return { year: m[1], month: m[2], day: m[3] };
+    m = raw.match(/^(\d{2})[\/.-](\d{2})[\/.-](\d{4})/);
+    if (m) return { year: m[3], month: m[2], day: m[1] };
+    return null;
+}
+
+function getDocumentAccountingPeriodV0456(doc = {}) {
+    const parsed = parseAccountingDateV0456(doc.invoice_date || doc.detected_date || doc.added_at);
+    if (parsed) return parsed;
+    const now = new Date();
+    return { year: String(now.getFullYear()), month: String(now.getMonth() + 1).padStart(2, '0'), day: '01' };
+}
+
+function syncDocumentAccountingPeriodV0456(documentId) {
+    const doc = getDocument(documentId);
+    if (!doc) return null;
+    const period = getDocumentAccountingPeriodV0456(doc);
+    db.prepare(`UPDATE documents SET accounting_period_year = ?, accounting_period_month = ? WHERE id = ?`).run(period.year, period.month, documentId);
+    return period;
+}
+
+function getDocumentPaymentSummaryV0456(documentId) {
+    const doc = getDocument(documentId);
+    if (!doc) return null;
+    const links = db.prepare(`
+        SELECT l.*, t.date_operation, t.label, t.amount AS transaction_amount
+        FROM document_transaction_links l
+        LEFT JOIN bank_transactions t ON t.id = l.transaction_id
+        WHERE l.document_id = ?
+        ORDER BY t.date_operation, l.id
+    `).all(documentId);
+    const invoiceAmount = Math.abs(Number(doc.amount_ttc ?? doc.detected_amount ?? 0));
+    const linkedAmount = links.reduce((sum, link) => sum + Math.abs(Number(link.amount ?? link.transaction_amount ?? 0)), 0);
+    const remaining = Math.max(0, invoiceAmount - linkedAmount);
+    return { doc, links, invoiceAmount, linkedAmount, remaining, completeness: invoiceAmount > 0 ? Math.min(100, Math.round((linkedAmount / invoiceAmount) * 100)) : 0 };
+}
+
+function candidateDocumentPoolForTransactionV0456(companyId, tx, limit = 80) {
+    const txDate = parseAccountingDateV0456(tx.date_operation || '') || {};
+    const label = normalizeSearchText(tx.label || '');
+    const tokens = label.split(' ').filter(t => t.length >= 4).slice(0, 8);
+    const rows = db.prepare(`
+        SELECT d.*
+        FROM documents d
+        WHERE d.company_id = ?
+        AND (d.deleted_at IS NULL OR d.deleted_at = '')
+        AND COALESCE(d.accounting_impact, 'yes') != 'no'
+        AND COALESCE(d.doc_type, 'facture') NOT IN ('releve','rib','contrat','divers')
+        AND (COALESCE(d.status, 'unmatched') != 'matched' OR d.linked_transaction_id IS NULL)
+        AND COALESCE(d.amount_ttc, d.detected_amount, 0) > 0
+        ORDER BY COALESCE(d.invoice_date, d.detected_date, d.added_at) DESC, d.id DESC
+        LIMIT ?
+    `).all(companyId, Math.max(10, Math.min(Number(limit) || 80, 250)));
+
+    return rows.map(doc => {
+        const supplier = normalizeSearchText(doc.detected_supplier || doc.third_party_name || doc.filename || '');
+        let supplierScore = 0;
+        tokens.forEach(token => { if (supplier.includes(token)) supplierScore += token.length >= 6 ? 12 : 6; });
+        if (!supplierScore && supplier && label.includes(supplier.split(' ')[0])) supplierScore += 8;
+        const period = getDocumentAccountingPeriodV0456(doc);
+        let dateScore = 0;
+        if (txDate.year && period.year === txDate.year) dateScore += 3;
+        if (txDate.month && Math.abs(Number(period.month) - Number(txDate.month)) <= 2) dateScore += 4;
+        return { ...doc, _matchScore: supplierScore + dateScore, _amount: Math.abs(Number(doc.amount_ttc ?? doc.detected_amount ?? 0)) };
+    }).filter(doc => doc._matchScore > 0 || rows.length <= 30)
+      .sort((a, b) => b._matchScore - a._matchScore || b.id - a.id)
+      .slice(0, 24);
+}
+
+function findBestDocumentSubsetV0456(candidates, targetAmount, tolerance = 0.02) {
+    const target = Math.abs(Number(targetAmount || 0));
+    const usable = candidates
+        .filter(d => Number.isFinite(d._amount) && d._amount > 0 && d._amount <= target + Math.max(tolerance, 1))
+        .slice(0, 18);
+    let best = { docs: [], total: 0, remaining: target, completeness: 0, exact: false };
+    const maxNodes = 1 << Math.min(usable.length, 18);
+    for (let mask = 1; mask < maxNodes; mask++) {
+        let total = 0;
+        let docs = [];
+        let score = 0;
+        for (let i = 0; i < usable.length; i++) {
+            if (mask & (1 << i)) {
+                total += usable[i]._amount;
+                docs.push(usable[i]);
+                score += usable[i]._matchScore || 0;
+            }
+        }
+        if (total > target + Math.max(tolerance, 0.01)) continue;
+        const remaining = Math.abs(target - total);
+        const completeness = target > 0 ? (total / target) * 100 : 0;
+        const better = remaining < best.remaining - 0.005
+            || (Math.abs(remaining - best.remaining) < 0.005 && completeness > best.completeness)
+            || (Math.abs(remaining - best.remaining) < 0.005 && docs.length > best.docs.length && score > (best.score || 0));
+        if (better) best = { docs, total, remaining, completeness: Math.round(completeness), exact: remaining <= tolerance, score };
+        if (best.exact && best.docs.length > 1) break;
+    }
+    return best;
+}
+
+function findMultipleDocumentMatchesForTransactionV0456(companyId, transactionId, options = {}) {
+    const tx = getTransaction(transactionId);
+    if (!tx) return { ok: false, message: 'Opération introuvable', candidates: [], best: null };
+    const tolerance = Number(options.tolerance ?? 0.02);
+    const candidates = candidateDocumentPoolForTransactionV0456(companyId, tx, options.limit || 80);
+    const targetAmount = Math.abs(Number(tx.amount || 0));
+    const best = findBestDocumentSubsetV0456(candidates, targetAmount, tolerance);
+    return {
+        ok: true,
+        transaction: tx,
+        targetAmount,
+        candidates: candidates.slice(0, 20),
+        best: {
+            ...best,
+            remainingLabel: best.remaining > tolerance ? `${best.remaining.toFixed(2)} € restant à rapprocher` : 'Rapprochement complet',
+            partial: best.remaining > tolerance && best.total > 0
+        }
+    };
+}
+
+function linkMultipleDocumentsToTransactionV0456(data = {}) {
+    const transactionId = Number(data.transactionId || 0);
+    const documentIds = Array.isArray(data.documentIds) ? data.documentIds.map(Number).filter(Boolean) : [];
+    const tx = getTransaction(transactionId);
+    if (!tx || !documentIds.length) return { ok: false, message: 'Opération ou documents manquants' };
+    const docs = documentIds.map(id => getDocument(id)).filter(Boolean);
+    const totalDocs = docs.reduce((sum, doc) => sum + Math.abs(Number(doc.amount_ttc ?? doc.detected_amount ?? 0)), 0);
+    const target = Math.abs(Number(tx.amount || 0));
+    const remaining = Math.max(0, target - totalDocs);
+    const status = remaining <= Number(data.tolerance ?? 0.02) ? 'matched' : 'partial';
+    const dbTx = db.transaction(() => {
+        for (const doc of docs) {
+            const amount = Math.abs(Number(doc.amount_ttc ?? doc.detected_amount ?? 0));
+            db.prepare(`
+                INSERT INTO document_transaction_links(document_id, transaction_id, amount, link_type)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(document_id, transaction_id) DO UPDATE SET amount = excluded.amount, link_type = excluded.link_type
+            `).run(doc.id, transactionId, amount, status === 'matched' ? 'grouped' : 'partial');
+            db.prepare(`UPDATE documents SET linked_transaction_id = COALESCE(linked_transaction_id, ?), status = ?, payment_status = CASE WHEN ? = 'matched' THEN 'paid' ELSE 'partial' END WHERE id = ?`)
+                .run(transactionId, status, status, doc.id);
+        }
+        db.prepare(`UPDATE bank_transactions SET status = ? WHERE id = ?`).run(status === 'matched' ? 'verified' : 'partial', transactionId);
+    });
+    dbTx();
+    return { ok: true, transactionId, documentIds, targetAmount: target, linkedAmount: totalDocs, remaining, completeness: target > 0 ? Math.round((totalDocs / target) * 100) : 0, status };
+}
+
+function crc32V0456(buffer) {
+    let table = crc32V0456.table;
+    if (!table) {
+        table = crc32V0456.table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            table[i] = c >>> 0;
+        }
+    }
+    let crc = 0 ^ -1;
+    for (let i = 0; i < buffer.length; i++) crc = (crc >>> 8) ^ table[(crc ^ buffer[i]) & 0xFF];
+    return (crc ^ -1) >>> 0;
+}
+
+function dosDateTimeV0456(date = new Date()) {
+    const time = ((date.getHours() & 31) << 11) | ((date.getMinutes() & 63) << 5) | ((Math.floor(date.getSeconds() / 2)) & 31);
+    const dosDate = (((date.getFullYear() - 1980) & 127) << 9) | (((date.getMonth() + 1) & 15) << 5) | (date.getDate() & 31);
+    return { time, date: dosDate };
+}
+
+function writeZipStoreV0456(zipPath, entries) {
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    const now = dosDateTimeV0456(new Date());
+    for (const entry of entries) {
+        const nameBuffer = Buffer.from(entry.name.replace(/\\/g, '/'), 'utf8');
+        const data = entry.data ? Buffer.from(entry.data) : fs.readFileSync(entry.path);
+        const crc = crc32V0456(data);
+        const local = Buffer.alloc(30);
+        local.writeUInt32LE(0x04034b50, 0);
+        local.writeUInt16LE(20, 4);
+        local.writeUInt16LE(0x0800, 6);
+        local.writeUInt16LE(0, 8);
+        local.writeUInt16LE(now.time, 10);
+        local.writeUInt16LE(now.date, 12);
+        local.writeUInt32LE(crc, 14);
+        local.writeUInt32LE(data.length, 18);
+        local.writeUInt32LE(data.length, 22);
+        local.writeUInt16LE(nameBuffer.length, 26);
+        local.writeUInt16LE(0, 28);
+        chunks.push(local, nameBuffer, data);
+        const c = Buffer.alloc(46);
+        c.writeUInt32LE(0x02014b50, 0);
+        c.writeUInt16LE(20, 4);
+        c.writeUInt16LE(20, 6);
+        c.writeUInt16LE(0x0800, 8);
+        c.writeUInt16LE(0, 10);
+        c.writeUInt16LE(now.time, 12);
+        c.writeUInt16LE(now.date, 14);
+        c.writeUInt32LE(crc, 16);
+        c.writeUInt32LE(data.length, 20);
+        c.writeUInt32LE(data.length, 24);
+        c.writeUInt16LE(nameBuffer.length, 28);
+        c.writeUInt16LE(0, 30);
+        c.writeUInt16LE(0, 32);
+        c.writeUInt16LE(0, 34);
+        c.writeUInt16LE(0, 36);
+        c.writeUInt32LE(0, 38);
+        c.writeUInt32LE(offset, 42);
+        central.push(c, nameBuffer);
+        offset += local.length + nameBuffer.length + data.length;
+    }
+    const centralStart = offset;
+    const centralBuffer = Buffer.concat(central);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(0, 4);
+    end.writeUInt16LE(0, 6);
+    end.writeUInt16LE(entries.length, 8);
+    end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(centralBuffer.length, 12);
+    end.writeUInt32LE(centralStart, 16);
+    end.writeUInt16LE(0, 20);
+    fs.mkdirSync(path.dirname(zipPath), { recursive: true });
+    fs.writeFileSync(zipPath, Buffer.concat([...chunks, centralBuffer, end]));
+    return zipPath;
+}
+
+function getCompanyNameV0456(companyId) {
+    const company = db.prepare('SELECT name FROM companies WHERE id = ?').get(companyId);
+    return company?.name || `Societe-${companyId}`;
+}
+
+function statementRowsForPeriodV0456(companyId, year, month) {
+    return db.prepare(`
+        SELECT s.*, ba.bank_name, ba.account_name, ba.account_number
+        FROM statements s
+        LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
+        WHERE ba.company_id = ?
+        AND s.statement_year = ?
+        AND s.statement_month = ?
+        ORDER BY ba.bank_name, ba.account_name, s.filename
+    `).all(companyId, String(year), String(month).padStart(2, '0'));
+}
+
+function documentRowsForAccountingArchiveV0456(companyId, year, month) {
+    db.prepare(`
+        SELECT id FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND (accounting_period_year IS NULL OR accounting_period_year = '' OR accounting_period_month IS NULL OR accounting_period_month = '')
+    `).all(companyId).forEach(row => syncDocumentAccountingPeriodV0456(row.id));
+    const rows = db.prepare(`
+        SELECT * FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND COALESCE(accounting_period_year, '') = ?
+        AND COALESCE(accounting_period_month, '') = ?
+        ORDER BY COALESCE(doc_type, 'facture'), filename
+    `).all(companyId, String(year), String(month).padStart(2, '0'));
+    return rows;
+}
+
+function documentRowsForTransmissionExportV0456(companyId) {
+    return db.prepare(`
+        SELECT * FROM documents
+        WHERE company_id = ?
+        AND (deleted_at IS NULL OR deleted_at = '')
+        AND COALESCE(accounting_impact, 'yes') != 'no'
+        AND COALESCE(transmission_status, 'not_transmitted') != 'transmitted'
+        ORDER BY COALESCE(accounting_period_year, substr(invoice_date,1,4), substr(detected_date,1,4), substr(added_at,1,4)),
+                 COALESCE(accounting_period_month, substr(invoice_date,6,2), substr(detected_date,6,2), substr(added_at,6,2)),
+                 COALESCE(doc_type, 'facture'), filename
+    `).all(companyId);
+}
+
+function folderForDocumentV0456(doc) {
+    const type = String(doc.doc_type || 'facture').toLowerCase();
+    const nature = String(doc.document_nature || '').toLowerCase();
+    if (nature.includes('admin') || ['contrat','divers'].includes(type)) return 'ADMINISTRATIF';
+    if (type === 'avoir') return 'AVOIRS';
+    if (type === 'releve') return 'RELEVES_BANCAIRES';
+    if (type === 'rib') return 'RIB';
+    if (type.includes('mutuelle')) return 'MUTUELLES';
+    if (type === 'note_frais') return 'NOTES_DE_FRAIS';
+    return 'FACTURES_FOURNISSEURS';
+}
+
+function buildAccountingZipEntriesV0456({ companyId, year, month, exportType, documents, statements }) {
+    const entries = [];
+    const companyName = getCompanyNameV0456(companyId);
+    const periodLabel = `${year}-${String(month).padStart(2, '0')}`;
+    let bordereau = `Focus Compta - ${exportType === 'archive' ? 'Archive comptable' : 'Export comptable'}\n`;
+    bordereau += `Société : ${companyName}\nPériode demandée : ${periodLabel}\nGénéré le : ${new Date().toLocaleString('fr-FR')}\n\n`;
+    bordereau += `Documents : ${documents.length}\nRelevés bancaires : ${statements.length}\n\n`;
+    bordereau += `DOCUMENTS\n`;
+
+    documents.forEach((doc, index) => {
+        const period = getDocumentAccountingPeriodV0456(doc);
+        const folder = folderForDocumentV0456(doc);
+        const ext = path.extname(doc.filename || doc.filepath || '') || path.extname(doc.filepath || '') || '.pdf';
+        const supplier = safeFilenameV0456(doc.detected_supplier || doc.third_party_name || 'Sans fournisseur');
+        const base = safeFilenameV0456(`${period.year}-${period.month}_${supplier}_${doc.invoice_number || doc.detected_reference || doc.filename || ('document-' + doc.id)}`);
+        const name = `${folder}/${period.year}-${period.month}/${base}${base.toLowerCase().endsWith(ext.toLowerCase()) ? '' : ext}`;
+        if (doc.filepath && fs.existsSync(doc.filepath)) entries.push({ name, path: doc.filepath });
+        bordereau += `${index + 1}. ${folder} | ${period.year}-${period.month} | ${doc.filename} | ${doc.detected_supplier || ''} | TTC ${Number(doc.amount_ttc || doc.detected_amount || 0).toFixed(2)} | transmis=${doc.transmission_status || 'not_transmitted'}\n`;
+    });
+
+    bordereau += `\nRELEVES BANCAIRES\n`;
+    statements.forEach((st, index) => {
+        const ext = path.extname(st.filename || st.filepath || '') || '.pdf';
+        const acc = safeFilenameV0456([st.bank_name, st.account_name || st.account_number].filter(Boolean).join(' '), 'Compte');
+        const base = safeFilenameV0456(`${st.statement_year}-${st.statement_month}_${acc}_${st.filename || ('releve-' + st.id)}`);
+        const name = `RELEVES_BANCAIRES/${st.statement_year}-${st.statement_month}/${base}${base.toLowerCase().endsWith(ext.toLowerCase()) ? '' : ext}`;
+        if (st.filepath && fs.existsSync(st.filepath)) entries.push({ name, path: st.filepath });
+        bordereau += `${index + 1}. ${st.statement_year}-${st.statement_month} | ${st.bank_name || ''} ${st.account_name || ''} | ${st.filename}\n`;
+    });
+
+    const totalTtc = documents.reduce((sum, doc) => sum + Number(doc.amount_ttc || doc.detected_amount || 0), 0);
+    bordereau += `\nTOTAL TTC documents : ${totalTtc.toFixed(2)} €\n`;
+    entries.unshift({ name: 'BORDEREAU_EXPORT.txt', data: Buffer.from(bordereau, 'utf8') });
+    return { entries, totalTtc, bordereau };
+}
+
+function createAccountingTransmissionExportV0456(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const month = String(data.month || (new Date().getMonth() + 1)).padStart(2, '0');
+    if (!companyId) throw new Error('Société manquante');
+    const documents = documentRowsForTransmissionExportV0456(companyId);
+    documents.forEach(doc => { if (!doc.accounting_period_year || !doc.accounting_period_month) syncDocumentAccountingPeriodV0456(doc.id); });
+    const statements = statementRowsForPeriodV0456(companyId, year, month);
+    const companyName = safeFilenameV0456(getCompanyNameV0456(companyId));
+    const lotCode = `EXP-${year}-${month}-${Date.now()}`;
+    const filename = `${companyName}-${lotCode}.zip`;
+    const zipPath = path.join(ACCOUNTING_EXPORTS_DIR, companyName, filename);
+    const { entries, totalTtc } = buildAccountingZipEntriesV0456({ companyId, year, month, exportType: 'transmission', documents, statements });
+    writeZipStoreV0456(zipPath, entries);
+
+    const lot = db.prepare(`
+        INSERT INTO accounting_export_lots(company_id, export_type, period_year, period_month, filename, filepath, documents_count, statements_count, total_ttc)
+        VALUES(?, 'transmission', ?, ?, ?, ?, ?, ?, ?)
+    `).run(companyId, year, month, filename, zipPath, documents.length, statements.length, totalTtc);
+
+    const lotId = Number(lot.lastInsertRowid);
+    const now = new Date().toISOString();
+    const tx = db.transaction(() => {
+        for (const doc of documents) {
+            const period = getDocumentAccountingPeriodV0456(doc);
+            db.prepare(`INSERT INTO accounting_export_items(lot_id, item_type, source_id, source_path, display_name, accounting_year, accounting_month) VALUES(?, 'document', ?, ?, ?, ?, ?)`)
+                .run(lotId, doc.id, doc.filepath || '', doc.filename || '', period.year, period.month);
+            db.prepare(`UPDATE documents SET transmission_status = 'transmitted', transmitted_at = ?, transmitted_export_lot_id = ? WHERE id = ?`).run(now, lotId, doc.id);
+        }
+        for (const st of statements) {
+            db.prepare(`INSERT INTO accounting_export_items(lot_id, item_type, source_id, source_path, display_name, accounting_year, accounting_month) VALUES(?, 'statement', ?, ?, ?, ?, ?)`)
+                .run(lotId, st.id, st.filepath || '', st.filename || '', st.statement_year || year, st.statement_month || month);
+            db.prepare(`UPDATE statements SET transmission_status = 'transmitted', transmitted_at = ?, transmitted_export_lot_id = ? WHERE id = ?`).run(now, lotId, st.id);
+        }
+    });
+    tx();
+    return { ok: true, lotId, filename, filepath: zipPath, documentsCount: documents.length, statementsCount: statements.length, totalTtc };
+}
+
+function createAccountingArchiveV0456(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const month = String(data.month || (new Date().getMonth() + 1)).padStart(2, '0');
+    if (!companyId) throw new Error('Société manquante');
+    const documents = documentRowsForAccountingArchiveV0456(companyId, year, month);
+    const statements = statementRowsForPeriodV0456(companyId, year, month);
+    const companyName = safeFilenameV0456(getCompanyNameV0456(companyId));
+    const lotCode = `ARCHIVE-${year}-${month}-${Date.now()}`;
+    const filename = `${companyName}-${lotCode}.zip`;
+    const zipPath = path.join(ACCOUNTING_EXPORTS_DIR, companyName, 'Archives', filename);
+    const { entries, totalTtc } = buildAccountingZipEntriesV0456({ companyId, year, month, exportType: 'archive', documents, statements });
+    writeZipStoreV0456(zipPath, entries);
+    const lot = db.prepare(`
+        INSERT INTO accounting_export_lots(company_id, export_type, period_year, period_month, filename, filepath, documents_count, statements_count, total_ttc)
+        VALUES(?, 'archive', ?, ?, ?, ?, ?, ?, ?)
+    `).run(companyId, year, month, filename, zipPath, documents.length, statements.length, totalTtc);
+    return { ok: true, lotId: Number(lot.lastInsertRowid), filename, filepath: zipPath, documentsCount: documents.length, statementsCount: statements.length, totalTtc };
+}
+
+function getAccountingExportPreviewV0456(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const month = String(data.month || (new Date().getMonth() + 1)).padStart(2, '0');
+    if (!companyId) return { documents: [], statements: [], totals: {} };
+    const mode = data.mode || 'transmission';
+    const documents = mode === 'archive' ? documentRowsForAccountingArchiveV0456(companyId, year, month) : documentRowsForTransmissionExportV0456(companyId);
+    const statements = statementRowsForPeriodV0456(companyId, year, month);
+    const totalTtc = documents.reduce((sum, doc) => sum + Number(doc.amount_ttc || doc.detected_amount || 0), 0);
+    return {
+        mode, year, month,
+        documents: documents.map(doc => ({ id: doc.id, filename: doc.filename, supplier: doc.detected_supplier || doc.third_party_name || '', docType: doc.doc_type, transmissionStatus: doc.transmission_status || 'not_transmitted', period: getDocumentAccountingPeriodV0456(doc), amountTtc: Number(doc.amount_ttc || doc.detected_amount || 0) })),
+        statements: statements.map(st => ({ id: st.id, filename: st.filename, bankName: st.bank_name, accountName: st.account_name, period: `${st.statement_year}-${st.statement_month}`, transmissionStatus: st.transmission_status || 'not_transmitted' })),
+        totals: { documentsCount: documents.length, statementsCount: statements.length, totalTtc }
+    };
+}
+
+function getAccountingExportLotsV0456(companyId = null) {
+    const where = companyId ? 'WHERE company_id = ?' : '';
+    const params = companyId ? [companyId] : [];
+    return db.prepare(`SELECT * FROM accounting_export_lots ${where} ORDER BY created_at DESC LIMIT 100`).all(...params);
+}
+
+
+function getExecutiveDashboardV046(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    if (!companyId) {
+        return {
+            year,
+            treasury: 0,
+            documents: {},
+            vat: {},
+            payments: {},
+            exports: {},
+            statements: {},
+            bank: {},
+            alerts: []
+        };
+    }
+
+    const docWhere = `d.company_id = ? AND d.deleted_at IS NULL`;
+    const yearFilter = `(COALESCE(d.accounting_period_year, substr(COALESCE(d.invoice_date, d.detected_date, d.added_at),1,4)) = ?)`;
+    const docParams = [companyId, year];
+
+    const documents = db.prepare(`
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN COALESCE(d.accounting_impact,'yes') = 'yes' THEN 1 ELSE 0 END) AS accounting_docs,
+            SUM(CASE WHEN COALESCE(d.transmission_status,'not_transmitted') != 'transmitted' AND COALESCE(d.accounting_impact,'yes') = 'yes' THEN 1 ELSE 0 END) AS not_transmitted,
+            SUM(CASE WHEN COALESCE(d.payment_status,'unknown') != 'paid' AND COALESCE(d.accounting_impact,'yes') = 'yes' THEN 1 ELSE 0 END) AS unpaid_count,
+            COALESCE(SUM(CASE WHEN COALESCE(d.payment_status,'unknown') != 'paid' AND COALESCE(d.accounting_impact,'yes') = 'yes' THEN COALESCE(d.amount_ttc, d.detected_amount, 0) ELSE 0 END),0) AS unpaid_ttc,
+            SUM(CASE WHEN d.due_date IS NOT NULL AND d.due_date != '' AND d.due_date < date('now') AND COALESCE(d.payment_status,'unknown') != 'paid' THEN 1 ELSE 0 END) AS overdue_count,
+            COALESCE(SUM(COALESCE(d.amount_tva,0)),0) AS vat_detected,
+            COALESCE(SUM(COALESCE(d.amount_ht,0)),0) AS amount_ht,
+            COALESCE(SUM(COALESCE(d.amount_ttc, d.detected_amount, 0)),0) AS amount_ttc
+        FROM documents d
+        WHERE ${docWhere} AND ${yearFilter}
+    `).get(...docParams) || {};
+
+    const exportStats = db.prepare(`
+        SELECT
+            COUNT(*) AS lots,
+            SUM(CASE WHEN export_type = 'transmission' THEN 1 ELSE 0 END) AS transmission_lots,
+            SUM(CASE WHEN export_type = 'archive' THEN 1 ELSE 0 END) AS archive_lots,
+            COALESCE(SUM(documents_count),0) AS documents_exported,
+            COALESCE(SUM(statements_count),0) AS statements_exported
+        FROM accounting_export_lots
+        WHERE company_id = ? AND period_year = ?
+    `).get(companyId, year) || {};
+
+    const statements = db.prepare(`
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN COALESCE(s.transmission_status,'not_transmitted') != 'transmitted' THEN 1 ELSE 0 END) AS not_transmitted
+        FROM statements s
+        JOIN bank_accounts b ON b.id = s.bank_account_id
+        WHERE b.company_id = ? AND s.statement_year = ?
+    `).get(companyId, year) || {};
+
+    const latestBalances = db.prepare(`
+        SELECT ba.id, ba.bank_name, ba.account_name, s.new_balance
+        FROM bank_accounts ba
+        LEFT JOIN statements s ON s.id = (
+            SELECT s2.id
+            FROM statements s2
+            WHERE s2.bank_account_id = ba.id
+              AND s2.new_balance IS NOT NULL
+            ORDER BY COALESCE(s2.statement_year,'0000') DESC, COALESCE(s2.statement_month,'00') DESC, s2.imported_at DESC
+            LIMIT 1
+        )
+        WHERE ba.company_id = ?
+    `).all(companyId);
+    const treasury = latestBalances.reduce((sum, row) => sum + Number(row.new_balance || 0), 0);
+
+    const bank = db.prepare(`
+        SELECT
+            COUNT(*) AS operations,
+            SUM(CASE WHEN COALESCE(t.category,'') != '' THEN 1 ELSE 0 END) AS categorized,
+            SUM(CASE WHEN COALESCE(t.status,'missing') IN ('verified','validé','valide','Vérifié','verified_no_receipt') THEN 1 ELSE 0 END) AS verified,
+            SUM(CASE WHEN COALESCE(t.status,'missing') = 'missing' THEN 1 ELSE 0 END) AS missing,
+            COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END),0) AS credits,
+            COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END),0) AS debits
+        FROM bank_transactions t
+        JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        WHERE ba.company_id = ? AND substr(COALESCE(t.date_operation,''),1,4) = ?
+    `).get(companyId, year) || {};
+
+    const tp = db.prepare(`
+        SELECT
+            COUNT(*) AS operations,
+            COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END),0) AS received,
+            COALESCE(SUM(CASE WHEN COALESCE(t.status,'missing') = 'missing' THEN ABS(t.amount) ELSE 0 END),0) AS to_check
+        FROM bank_transactions t
+        JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        WHERE ba.company_id = ?
+          AND substr(COALESCE(t.date_operation,''),1,4) = ?
+          AND (
+              lower(COALESCE(t.category,'')) LIKE '%tiers%'
+              OR lower(COALESCE(t.third_party_name,'')) LIKE '%viamedis%'
+              OR lower(COALESCE(t.third_party_name,'')) LIKE '%almerys%'
+              OR lower(COALESCE(t.third_party_name,'')) LIKE '%swiss%'
+              OR lower(COALESCE(t.third_party_name,'')) LIKE '%allianz%'
+              OR lower(COALESCE(t.third_party_name,'')) LIKE '%mma%'
+          )
+    `).get(companyId, year) || {};
+
+    const recentAlerts = [];
+    if (Number(documents.not_transmitted || 0) > 0) recentAlerts.push({ level: 'warning', label: `${documents.not_transmitted} document(s) comptables non transmis` });
+    if (Number(statements.not_transmitted || 0) > 0) recentAlerts.push({ level: 'warning', label: `${statements.not_transmitted} relevé(s) bancaire(s) non transmis` });
+    if (Number(documents.overdue_count || 0) > 0) recentAlerts.push({ level: 'danger', label: `${documents.overdue_count} facture(s) échue(s)` });
+    if (Number(bank.missing || 0) > 0) recentAlerts.push({ level: 'warning', label: `${bank.missing} opération(s) sans justificatif/statut` });
+
+    const automationRate = Number(bank.operations || 0) ? Math.round((Number(bank.categorized || 0) / Number(bank.operations || 0)) * 100) : 0;
+
+    return {
+        year,
+        treasury,
+        accounts: latestBalances,
+        documents,
+        vat: {
+            deductible: Number(documents.vat_detected || 0),
+            ht: Number(documents.amount_ht || 0),
+            ttc: Number(documents.amount_ttc || 0)
+        },
+        payments: {
+            unpaidCount: Number(documents.unpaid_count || 0),
+            unpaidTtc: Number(documents.unpaid_ttc || 0),
+            overdueCount: Number(documents.overdue_count || 0)
+        },
+        exports: exportStats,
+        statements,
+        bank: { ...bank, automationRate },
+        thirdPartyPayments: tp,
+        alerts: recentAlerts
+    };
+}
+
+
+
+// V0.49 - Intelligence financière & pilotage dirigeant.
+// Cette fonction ne remplace pas la comptabilité : elle transforme les données existantes
+// en tendances de gestion lisibles (trésorerie prévisionnelle, fournisseurs, charges,
+// tiers-payant/mutuelles et alertes de variation).
+function getFinancialIntelligenceV049(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const previousYear = String(Number(year) - 1);
+    const month = data.month ? String(data.month).padStart(2, '0') : null;
+
+    const empty = {
+        year,
+        previousYear,
+        cashForecast: { today: 0, plus30: 0, plus60: 0, plus90: 0, upcoming: [] },
+        revenue: { currentYearTtc: 0, previousYearTtc: 0, monthly: [] },
+        suppliers: { top: [], increases: [], decreases: [] },
+        charges: { categories: [] },
+        mutuals: { rows: [] },
+        anomalies: [],
+        executiveSummary: []
+    };
+    if (!companyId) return empty;
+
+    function safeGet(sql, params = [], fallback = {}) {
+        try { return db.prepare(sql).get(...params) || fallback; }
+        catch (error) { console.warn('V0.49 safeGet', error.message); return fallback; }
+    }
+    function safeAll(sql, params = []) {
+        try { return db.prepare(sql).all(...params) || []; }
+        catch (error) { console.warn('V0.49 safeAll', error.message); return []; }
+    }
+    function num(value) { return Number(value || 0); }
+    function monthFromDateExpression(column) {
+        return `substr(COALESCE(${column}, ''), 6, 2)`;
+    }
+
+    const latestBalances = safeAll(`
+        SELECT ba.id, ba.bank_name, ba.account_name, COALESCE(s.new_balance, 0) AS new_balance
+        FROM bank_accounts ba
+        LEFT JOIN statements s ON s.id = (
+            SELECT s2.id
+            FROM statements s2
+            WHERE s2.bank_account_id = ba.id
+              AND s2.new_balance IS NOT NULL
+            ORDER BY COALESCE(s2.statement_year,'0000') DESC,
+                     COALESCE(s2.statement_month,'00') DESC,
+                     s2.imported_at DESC
+            LIMIT 1
+        )
+        WHERE ba.company_id = ?
+    `, [companyId]);
+    const treasuryToday = latestBalances.reduce((sum, row) => sum + num(row.new_balance), 0);
+
+    const upcomingDocuments = safeAll(`
+        SELECT id, filename, detected_supplier, third_party_name, due_date, planned_payment_date,
+               COALESCE(amount_ttc, detected_amount, 0) AS amount
+        FROM documents
+        WHERE company_id = ?
+          AND deleted_at IS NULL
+          AND COALESCE(accounting_impact,'yes') = 'yes'
+          AND COALESCE(payment_status,'unknown') != 'paid'
+          AND COALESCE(amount_ttc, detected_amount, 0) > 0
+          AND COALESCE(planned_payment_date, due_date, invoice_date, detected_date, added_at) IS NOT NULL
+        ORDER BY COALESCE(planned_payment_date, due_date, invoice_date, detected_date, added_at) ASC
+        LIMIT 80
+    `, [companyId]);
+
+    const today = new Date();
+    function daysAhead(dateText) {
+        const d = new Date(String(dateText || '').slice(0, 10));
+        if (Number.isNaN(d.getTime())) return null;
+        return Math.ceil((d.getTime() - today.getTime()) / 86400000);
+    }
+    function forecastBalance(days) {
+        const outgoing = upcomingDocuments
+            .filter(doc => {
+                const dateText = doc.planned_payment_date || doc.due_date || '';
+                const delta = daysAhead(dateText);
+                return delta !== null && delta >= 0 && delta <= days;
+            })
+            .reduce((sum, doc) => sum + num(doc.amount), 0);
+        return treasuryToday - outgoing;
+    }
+
+    const revenueMonthly = safeAll(`
+        SELECT period_month AS month,
+               COALESCE(SUM(net_ca_ttc),0) AS ttc,
+               COALESCE(SUM(net_ca_ht),0) AS ht,
+               COALESCE(SUM(tva_total),0) AS vat
+        FROM cash_sheets
+        WHERE company_id = ? AND period_year = ?
+        GROUP BY period_month
+        ORDER BY period_month
+    `, [companyId, year]);
+    const revenueCurrent = revenueMonthly.reduce((sum, row) => sum + num(row.ttc), 0);
+    const revenuePrevious = safeGet(`
+        SELECT COALESCE(SUM(net_ca_ttc),0) AS total
+        FROM cash_sheets
+        WHERE company_id = ? AND period_year = ?
+    `, [companyId, previousYear], { total: 0 }).total;
+
+    const supplierRows = safeAll(`
+        WITH current_suppliers AS (
+            SELECT
+                COALESCE(NULLIF(d.third_party_name,''), NULLIF(d.detected_supplier,''), 'Non identifié') AS supplier,
+                COALESCE(SUM(COALESCE(d.amount_ttc, d.detected_amount, 0)),0) AS current_amount,
+                COUNT(*) AS documents_count
+            FROM documents d
+            WHERE d.company_id = ?
+              AND d.deleted_at IS NULL
+              AND COALESCE(d.accounting_impact,'yes') = 'yes'
+              AND COALESCE(d.amount_ttc, d.detected_amount, 0) > 0
+              AND COALESCE(d.accounting_period_year, substr(COALESCE(d.invoice_date, d.detected_date, d.added_at),1,4)) = ?
+            GROUP BY supplier
+        ),
+        previous_suppliers AS (
+            SELECT
+                COALESCE(NULLIF(d.third_party_name,''), NULLIF(d.detected_supplier,''), 'Non identifié') AS supplier,
+                COALESCE(SUM(COALESCE(d.amount_ttc, d.detected_amount, 0)),0) AS previous_amount
+            FROM documents d
+            WHERE d.company_id = ?
+              AND d.deleted_at IS NULL
+              AND COALESCE(d.accounting_impact,'yes') = 'yes'
+              AND COALESCE(d.amount_ttc, d.detected_amount, 0) > 0
+              AND COALESCE(d.accounting_period_year, substr(COALESCE(d.invoice_date, d.detected_date, d.added_at),1,4)) = ?
+            GROUP BY supplier
+        )
+        SELECT c.supplier, c.current_amount, COALESCE(p.previous_amount,0) AS previous_amount, c.documents_count,
+               CASE WHEN COALESCE(p.previous_amount,0) > 0
+                    THEN ROUND(((c.current_amount - p.previous_amount) / p.previous_amount) * 100, 1)
+                    ELSE NULL END AS variation_percent
+        FROM current_suppliers c
+        LEFT JOIN previous_suppliers p ON lower(p.supplier) = lower(c.supplier)
+        ORDER BY c.current_amount DESC
+        LIMIT 30
+    `, [companyId, year, companyId, previousYear]);
+
+    const categoryRows = safeAll(`
+        WITH current_categories AS (
+            SELECT COALESCE(NULLIF(t.category,''), 'Non catégorisé') AS category,
+                   COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END),0) AS current_amount,
+                   COUNT(*) AS operations_count
+            FROM bank_transactions t
+            JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            WHERE ba.company_id = ? AND substr(COALESCE(t.date_operation,''),1,4) = ?
+            GROUP BY category
+        ),
+        previous_categories AS (
+            SELECT COALESCE(NULLIF(t.category,''), 'Non catégorisé') AS category,
+                   COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END),0) AS previous_amount
+            FROM bank_transactions t
+            JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            WHERE ba.company_id = ? AND substr(COALESCE(t.date_operation,''),1,4) = ?
+            GROUP BY category
+        )
+        SELECT c.category, c.current_amount, COALESCE(p.previous_amount,0) AS previous_amount, c.operations_count,
+               CASE WHEN COALESCE(p.previous_amount,0) > 0
+                    THEN ROUND(((c.current_amount - p.previous_amount) / p.previous_amount) * 100, 1)
+                    ELSE NULL END AS variation_percent
+        FROM current_categories c
+        LEFT JOIN previous_categories p ON lower(p.category) = lower(c.category)
+        ORDER BY c.current_amount DESC
+        LIMIT 20
+    `, [companyId, year, companyId, previousYear]);
+
+    const mutualRows = safeAll(`
+        WITH current_mutuals AS (
+            SELECT COALESCE(NULLIF(t.third_party_name,''), NULLIF(t.label,''), 'Mutuelle non identifiée') AS name,
+                   COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END),0) AS current_received,
+                   COUNT(*) AS operations_count
+            FROM bank_transactions t
+            JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            WHERE ba.company_id = ?
+              AND substr(COALESCE(t.date_operation,''),1,4) = ?
+              AND (
+                  lower(COALESCE(t.category,'')) LIKE '%tiers%'
+                  OR lower(COALESCE(t.category,'')) LIKE '%mutuelle%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%viamedis%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%almerys%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%swiss%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%allianz%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%mma%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%viamedis%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%almerys%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%swiss%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%allianz%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%mma%'
+              )
+            GROUP BY name
+        ),
+        previous_mutuals AS (
+            SELECT COALESCE(NULLIF(t.third_party_name,''), NULLIF(t.label,''), 'Mutuelle non identifiée') AS name,
+                   COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END),0) AS previous_received
+            FROM bank_transactions t
+            JOIN bank_accounts ba ON ba.id = t.bank_account_id
+            WHERE ba.company_id = ?
+              AND substr(COALESCE(t.date_operation,''),1,4) = ?
+              AND (
+                  lower(COALESCE(t.category,'')) LIKE '%tiers%'
+                  OR lower(COALESCE(t.category,'')) LIKE '%mutuelle%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%viamedis%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%almerys%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%swiss%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%allianz%'
+                  OR lower(COALESCE(t.third_party_name,'')) LIKE '%mma%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%viamedis%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%almerys%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%swiss%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%allianz%'
+                  OR lower(COALESCE(t.label,'')) LIKE '%mma%'
+              )
+            GROUP BY name
+        )
+        SELECT c.name, c.current_received, COALESCE(p.previous_received,0) AS previous_received, c.operations_count,
+               CASE WHEN COALESCE(p.previous_received,0) > 0
+                    THEN ROUND(((c.current_received - p.previous_received) / p.previous_received) * 100, 1)
+                    ELSE NULL END AS variation_percent
+        FROM current_mutuals c
+        LEFT JOIN previous_mutuals p ON lower(p.name) = lower(c.name)
+        ORDER BY c.current_received DESC
+        LIMIT 20
+    `, [companyId, year, companyId, previousYear]);
+
+    const anomalies = [];
+    supplierRows.forEach(row => {
+        if (row.variation_percent !== null && row.previous_amount > 500 && row.variation_percent >= 25) {
+            anomalies.push({ level: 'warning', type: 'supplier_increase', label: `${row.supplier} augmente de ${row.variation_percent} % vs ${previousYear}`, amount: row.current_amount });
+        }
+    });
+    categoryRows.forEach(row => {
+        if (row.variation_percent !== null && row.previous_amount > 300 && row.variation_percent >= 25) {
+            anomalies.push({ level: 'warning', type: 'charge_increase', label: `Charge ${row.category} en hausse de ${row.variation_percent} %`, amount: row.current_amount });
+        }
+    });
+    mutualRows.forEach(row => {
+        if (row.variation_percent !== null && row.previous_received > 500 && row.variation_percent <= -15) {
+            anomalies.push({ level: 'danger', type: 'mutual_drop', label: `${row.name} baisse de ${Math.abs(row.variation_percent)} % vs ${previousYear}`, amount: row.current_received });
+        }
+    });
+
+    const missingRecurring = safeAll(`
+        SELECT supplier, COUNT(DISTINCT month_key) AS active_months, MAX(month_key) AS last_month
+        FROM (
+            SELECT COALESCE(NULLIF(d.third_party_name,''), NULLIF(d.detected_supplier,''), 'Non identifié') AS supplier,
+                   substr(COALESCE(d.invoice_date, d.detected_date, d.added_at),1,7) AS month_key
+            FROM documents d
+            WHERE d.company_id = ?
+              AND d.deleted_at IS NULL
+              AND COALESCE(d.accounting_impact,'yes') = 'yes'
+              AND COALESCE(d.accounting_period_year, substr(COALESCE(d.invoice_date, d.detected_date, d.added_at),1,4)) = ?
+        )
+        WHERE supplier != 'Non identifié'
+        GROUP BY supplier
+        HAVING active_months >= 2
+        ORDER BY active_months DESC
+        LIMIT 20
+    `, [companyId, year]);
+    const currentYearMonth = `${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    missingRecurring.forEach(row => {
+        if (row.last_month && row.last_month < currentYearMonth && Number(row.active_months || 0) >= 2) {
+            anomalies.push({ level: 'info', type: 'missing_recurring', label: `${row.supplier} n’a pas de facture récente détectée`, amount: 0 });
+        }
+    });
+
+    const executiveSummary = [
+        { label: 'Trésorerie actuelle', value: treasuryToday },
+        { label: 'Prévision +30 jours', value: forecastBalance(30) },
+        { label: 'CA TTC année', value: revenueCurrent },
+        { label: 'Factures à payer 90j', value: upcomingDocuments.filter(doc => { const d = daysAhead(doc.planned_payment_date || doc.due_date); return d !== null && d >= 0 && d <= 90; }).reduce((s, d) => s + num(d.amount), 0) }
+    ];
+
+    return {
+        year,
+        previousYear,
+        cashForecast: {
+            today: treasuryToday,
+            plus30: forecastBalance(30),
+            plus60: forecastBalance(60),
+            plus90: forecastBalance(90),
+            upcoming: upcomingDocuments.slice(0, 12).map(doc => ({
+                id: doc.id,
+                supplier: doc.detected_supplier || doc.third_party_name || doc.filename,
+                filename: doc.filename,
+                amount: num(doc.amount),
+                date: doc.planned_payment_date || doc.due_date || '',
+                days: daysAhead(doc.planned_payment_date || doc.due_date)
+            }))
+        },
+        revenue: {
+            currentYearTtc: revenueCurrent,
+            previousYearTtc: num(revenuePrevious),
+            monthly: revenueMonthly.map(row => ({ month: row.month, ttc: num(row.ttc), ht: num(row.ht), vat: num(row.vat) }))
+        },
+        suppliers: {
+            top: supplierRows.slice(0, 10),
+            increases: supplierRows.filter(row => row.variation_percent !== null && row.variation_percent > 0).sort((a,b) => num(b.variation_percent) - num(a.variation_percent)).slice(0, 8),
+            decreases: supplierRows.filter(row => row.variation_percent !== null && row.variation_percent < 0).sort((a,b) => num(a.variation_percent) - num(b.variation_percent)).slice(0, 8)
+        },
+        charges: { categories: categoryRows },
+        mutuals: { rows: mutualRows },
+        anomalies: anomalies.slice(0, 20),
+        executiveSummary
+    };
+}
+
+
+function getVatCenterV073(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    const monthLabel = {
+        '01':'Janvier','02':'Février','03':'Mars','04':'Avril','05':'Mai','06':'Juin',
+        '07':'Juillet','08':'Août','09':'Septembre','10':'Octobre','11':'Novembre','12':'Décembre'
+    };
+    if (!companyId) {
+        return { year, companyId, totals: { collected: 0, deductible: 0, balance: 0 }, months: months.map(month => ({ month, label: monthLabel[month], collected: 0, deductible: 0, balance: 0 })) };
+    }
+
+    const cashRows = db.prepare(`
+        SELECT
+            period_month AS month,
+            COUNT(*) AS cashSheets,
+            COALESCE(SUM(COALESCE(tva_brute,0)),0) AS grossVat,
+            COALESCE(SUM(COALESCE(discount_tva,0)),0) AS discountVat,
+            COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(tva_nette,0) != 0 THEN COALESCE(tva_nette,0)
+                    WHEN COALESCE(tva_brute,0) != 0 OR COALESCE(discount_tva,0) != 0 THEN COALESCE(tva_brute,0) - COALESCE(discount_tva,0)
+                    ELSE MAX(COALESCE(net_ca_ttc,0) - COALESCE(net_ca_ht,0), 0)
+                END
+            ),0) AS collected,
+            COALESCE(SUM(COALESCE(net_ca_ttc, invoiced_ca,0)),0) AS caTtc
+        FROM cash_sheets
+        WHERE company_id = ?
+          AND period_year = ?
+        GROUP BY period_month
+    `).all(companyId, year);
+
+    const docRows = db.prepare(`
+        SELECT
+            COALESCE(NULLIF(accounting_period_month,''), substr(COALESCE(invoice_date, detected_date, added_at),6,2)) AS month,
+            COUNT(*) AS documents,
+            COALESCE(SUM(CASE WHEN COALESCE(amount_tva,0) > 0 THEN COALESCE(amount_tva,0) ELSE 0 END),0) AS deductible,
+            COALESCE(SUM(CASE WHEN COALESCE(amount_ht,0) > 0 THEN COALESCE(amount_ht,0) ELSE 0 END),0) AS ht,
+            COALESCE(SUM(COALESCE(amount_ttc, detected_amount,0)),0) AS ttc,
+            SUM(CASE WHEN amount_tva IS NULL AND COALESCE(doc_type,'facture') IN ('facture','facture_fournisseur') THEN 1 ELSE 0 END) AS missingVat
+        FROM documents
+        WHERE company_id = ?
+          AND (deleted_at IS NULL OR deleted_at = '')
+          AND COALESCE(accounting_impact,'yes') = 'yes'
+          AND COALESCE(doc_type,'facture') NOT IN ('contrat','administratif','rib','releve','divers','don','informatif')
+          AND COALESCE(NULLIF(accounting_period_year,''), substr(COALESCE(invoice_date, detected_date, added_at),1,4)) = ?
+        GROUP BY month
+    `).all(companyId, year);
+
+    const byMonth = new Map(months.map(month => [month, {
+        year,
+        month,
+        label: monthLabel[month],
+        collected: 0,
+        deductible: 0,
+        balance: 0,
+        grossVat: 0,
+        discountVat: 0,
+        cashSheets: 0,
+        documents: 0,
+        missingVat: 0,
+        caTtc: 0,
+        status: 'empty'
+    }]));
+
+    cashRows.forEach(row => {
+        const month = String(row.month || '').padStart(2, '0');
+        if (!byMonth.has(month)) return;
+        const target = byMonth.get(month);
+        target.collected = Number(row.collected || 0);
+        target.grossVat = Number(row.grossVat || 0);
+        target.discountVat = Number(row.discountVat || 0);
+        target.cashSheets = Number(row.cashSheets || 0);
+        target.caTtc = Number(row.caTtc || 0);
+    });
+
+    docRows.forEach(row => {
+        const month = String(row.month || '').padStart(2, '0');
+        if (!byMonth.has(month)) return;
+        const target = byMonth.get(month);
+        target.deductible = Number(row.deductible || 0);
+        target.documents = Number(row.documents || 0);
+        target.missingVat = Number(row.missingVat || 0);
+        target.documentsHt = Number(row.ht || 0);
+        target.documentsTtc = Number(row.ttc || 0);
+    });
+
+    const rows = Array.from(byMonth.values()).map(row => {
+        row.balance = Number(row.collected || 0) - Number(row.deductible || 0);
+        row.status = row.cashSheets || row.documents
+            ? (row.missingVat ? 'warning' : 'ok')
+            : 'empty';
+        return row;
+    });
+
+    const totals = rows.reduce((acc, row) => {
+        acc.collected += Number(row.collected || 0);
+        acc.deductible += Number(row.deductible || 0);
+        acc.balance += Number(row.balance || 0);
+        acc.grossVat += Number(row.grossVat || 0);
+        acc.discountVat += Number(row.discountVat || 0);
+        acc.cashSheets += Number(row.cashSheets || 0);
+        acc.documents += Number(row.documents || 0);
+        acc.missingVat += Number(row.missingVat || 0);
+        return acc;
+    }, { collected: 0, deductible: 0, balance: 0, grossVat: 0, discountVat: 0, cashSheets: 0, documents: 0, missingVat: 0 });
+
+    return { year, companyId, totals, months: rows };
+}
+
+
+// V0.80 Foundation - audit, sauvegardes et santé comptable
+function safeJsonV080(value) {
+    try { return JSON.stringify(value || {}); } catch (_) { return '{}'; }
+}
+
+function addAuditLogV080(data = {}) {
+    const actionType = String(data.actionType || data.action_type || '').trim();
+    if (!actionType) return { ok: false, reason: 'missing_action_type' };
+    const result = db.prepare(`
+        INSERT INTO audit_log(company_id, action_type, entity_type, entity_id, label, details_json, created_at)
+        VALUES(?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+        data.companyId || data.company_id || null,
+        actionType,
+        data.entityType || data.entity_type || '',
+        data.entityId || data.entity_id || '',
+        data.label || '',
+        safeJsonV080(data.details || data.details_json || {})
+    );
+    return { ok: true, id: result.lastInsertRowid };
+}
+
+function getAuditLogV080(data = {}) {
+    const filters = [];
+    const params = [];
+    if (data.companyId) { filters.push('(company_id = ? OR company_id IS NULL)'); params.push(Number(data.companyId)); }
+    if (data.actionType) { filters.push('action_type = ?'); params.push(String(data.actionType)); }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const limit = Math.min(200, Math.max(1, Number(data.limit || 80)));
+    return db.prepare(`
+        SELECT id, company_id AS companyId, action_type AS actionType, entity_type AS entityType, entity_id AS entityId, label, details_json AS detailsJson, created_at AS createdAt
+        FROM audit_log
+        ${where}
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT ?
+    `).all(...params, limit);
+}
+
+function getAppRolesV080() {
+    return db.prepare(`SELECT role_key AS roleKey, role_label AS roleLabel, permissions_json AS permissionsJson FROM app_roles ORDER BY id`).all();
+}
+
+function getAppUsersV080() {
+    return db.prepare(`SELECT id, display_name AS displayName, email, role, is_active AS isActive, created_at AS createdAt FROM app_users ORDER BY id`).all();
+}
+
+// V0.81 - Utilisateurs, rôles et accès sociétés.
+function parseJsonV081(value, fallback = {}) {
+    try { return value ? JSON.parse(value) : fallback; } catch (_) { return fallback; }
+}
+
+function normalizeRoleV081(role) {
+    const value = String(role || 'collaborateur').trim();
+    const exists = db.prepare('SELECT role_key FROM app_roles WHERE role_key = ?').get(value);
+    return exists ? value : 'collaborateur';
+}
+
+function getUserCompanyIdsV081(userId) {
+    return db.prepare('SELECT company_id AS companyId FROM user_company_access WHERE user_id = ? ORDER BY company_id').all(Number(userId || 0)).map(row => Number(row.companyId));
+}
+
+function setUserCompanyAccessV081(userId, companyIds = []) {
+    const uid = Number(userId || 0);
+    if (!uid) return;
+    const cleanIds = [...new Set((companyIds || []).map(Number).filter(Boolean))];
+    const tx = db.transaction(() => {
+        db.prepare('DELETE FROM user_company_access WHERE user_id = ?').run(uid);
+        const insert = db.prepare('INSERT OR IGNORE INTO user_company_access(user_id, company_id) VALUES(?, ?)');
+        cleanIds.forEach(companyId => insert.run(uid, companyId));
+    });
+    tx();
+}
+
+function enrichUserV081(user) {
+    if (!user) return null;
+    const companyIds = getUserCompanyIdsV081(user.id);
+    const role = db.prepare('SELECT role_label AS roleLabel, permissions_json AS permissionsJson FROM app_roles WHERE role_key = ?').get(user.role) || {};
+    const companies = companyIds.length
+        ? db.prepare(`SELECT id, name FROM companies WHERE id IN (${companyIds.map(() => '?').join(',')}) ORDER BY name`).all(...companyIds)
+        : [];
+    return {
+        id: Number(user.id),
+        displayName: user.displayName || user.display_name || '',
+        email: user.email || '',
+        role: user.role || 'collaborateur',
+        roleLabel: role.roleLabel || user.role || 'Collaborateur',
+        permissions: parseJsonV081(role.permissionsJson, {}),
+        companyIds,
+        companies,
+        notes: user.notes || '',
+        isActive: Number(user.isActive ?? user.is_active ?? 1),
+        createdAt: user.createdAt || user.created_at || '',
+        updatedAt: user.updatedAt || user.updated_at || ''
+    };
+}
+
+function getAppRolesV081() {
+    return db.prepare(`SELECT role_key AS roleKey, role_label AS roleLabel, permissions_json AS permissionsJson FROM app_roles ORDER BY id`).all().map(role => ({
+        ...role,
+        permissions: parseJsonV081(role.permissionsJson, {})
+    }));
+}
+
+function getAppUsersV081() {
+    return db.prepare(`
+        SELECT id, display_name AS displayName, email, role, notes, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
+        FROM app_users
+        ORDER BY is_active DESC, display_name COLLATE NOCASE
+    `).all().map(enrichUserV081);
+}
+
+function getCurrentUserV081() {
+    const session = db.prepare('SELECT current_user_id AS currentUserId FROM app_session WHERE id = 1').get();
+    const userId = Number(session?.currentUserId || 0);
+    const row = userId ? db.prepare(`SELECT id, display_name AS displayName, email, role, notes, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt FROM app_users WHERE id = ?`).get(userId) : null;
+    if (row) return enrichUserV081(row);
+    const first = db.prepare(`SELECT id, display_name AS displayName, email, role, notes, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt FROM app_users WHERE is_active = 1 ORDER BY id LIMIT 1`).get();
+    return enrichUserV081(first);
+}
+
+function setCurrentUserV081(userId) {
+    const uid = Number(userId || 0);
+    const user = db.prepare('SELECT id FROM app_users WHERE id = ? AND is_active = 1').get(uid);
+    if (!user) return { ok: false, reason: 'Utilisateur introuvable ou inactif.' };
+    db.prepare(`INSERT INTO app_session(id, current_user_id, updated_at) VALUES(1, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET current_user_id = excluded.current_user_id, updated_at = CURRENT_TIMESTAMP`).run(uid);
+    try { addAuditLogV080({ actionType: 'user_session_changed', entityType: 'user', entityId: String(uid), label: 'Utilisateur actif changé' }); } catch (_) {}
+    return { ok: true, currentUser: getCurrentUserV081() };
+}
+
+function createAppUserV081(data = {}) {
+    const displayName = String(data.displayName || data.display_name || '').trim();
+    if (!displayName) return { ok: false, reason: 'Nom obligatoire.' };
+    const email = String(data.email || '').trim();
+    const role = normalizeRoleV081(data.role);
+    const notes = String(data.notes || '').trim();
+    const isActive = data.isActive === false || Number(data.is_active) === 0 ? 0 : 1;
+    const result = db.prepare(`
+        INSERT INTO app_users(display_name, email, role, notes, is_active, updated_at)
+        VALUES(?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(displayName, email, role, notes, isActive);
+    setUserCompanyAccessV081(result.lastInsertRowid, data.companyIds || data.company_ids || []);
+    try { addAuditLogV080({ actionType: 'user_created', entityType: 'user', entityId: String(result.lastInsertRowid), label: `Utilisateur créé : ${displayName}`, details: { role, companyIds: data.companyIds || [] } }); } catch (_) {}
+    return { ok: true, user: enrichUserV081(db.prepare(`SELECT id, display_name AS displayName, email, role, notes, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt FROM app_users WHERE id = ?`).get(result.lastInsertRowid)) };
+}
+
+function updateAppUserV081(data = {}) {
+    const id = Number(data.id || 0);
+    if (!id) return { ok: false, reason: 'ID utilisateur manquant.' };
+    const existing = db.prepare('SELECT * FROM app_users WHERE id = ?').get(id);
+    if (!existing) return { ok: false, reason: 'Utilisateur introuvable.' };
+    const displayName = String(data.displayName || data.display_name || existing.display_name || '').trim();
+    if (!displayName) return { ok: false, reason: 'Nom obligatoire.' };
+    const email = String(data.email ?? existing.email ?? '').trim();
+    const role = normalizeRoleV081(data.role || existing.role);
+    const notes = String(data.notes ?? existing.notes ?? '').trim();
+    const isActive = data.isActive === false || Number(data.is_active) === 0 ? 0 : 1;
+    db.prepare(`
+        UPDATE app_users
+        SET display_name = ?, email = ?, role = ?, notes = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(displayName, email, role, notes, isActive, id);
+    if (Array.isArray(data.companyIds) || Array.isArray(data.company_ids)) setUserCompanyAccessV081(id, data.companyIds || data.company_ids || []);
+    try { addAuditLogV080({ actionType: 'user_updated', entityType: 'user', entityId: String(id), label: `Utilisateur modifié : ${displayName}`, details: { role, isActive } }); } catch (_) {}
+    return { ok: true, user: enrichUserV081(db.prepare(`SELECT id, display_name AS displayName, email, role, notes, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt FROM app_users WHERE id = ?`).get(id)) };
+}
+
+function disableAppUserV081(userId) {
+    const id = Number(userId || 0);
+    if (!id) return { ok: false, reason: 'ID utilisateur manquant.' };
+    const activeCount = db.prepare('SELECT COUNT(*) AS count FROM app_users WHERE is_active = 1').get().count || 0;
+    const user = db.prepare('SELECT display_name FROM app_users WHERE id = ?').get(id);
+    if (!user) return { ok: false, reason: 'Utilisateur introuvable.' };
+    if (activeCount <= 1) return { ok: false, reason: 'Impossible de désactiver le dernier utilisateur actif.' };
+    db.prepare('UPDATE app_users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    try { addAuditLogV080({ actionType: 'user_disabled', entityType: 'user', entityId: String(id), label: `Utilisateur désactivé : ${user.display_name}` }); } catch (_) {}
+    return { ok: true };
+}
+
+function getUserPermissionsSummaryV081(data = {}) {
+    const user = data.userId ? getAppUsersV081().find(u => Number(u.id) === Number(data.userId)) : getCurrentUserV081();
+    if (!user) return { ok: false, reason: 'Aucun utilisateur actif.' };
+    const modules = ['home','companies','bank','documents','matching','thirdParties','accounting','exports','settings'];
+    const allowed = user.permissions?.modules || [];
+    const isAdmin = allowed.includes('*');
+    return {
+        ok: true,
+        user,
+        readOnly: Boolean(user.permissions?.readOnly),
+        canWrite: Boolean(user.permissions?.canWrite),
+        canExport: Boolean(user.permissions?.canExport),
+        modules: modules.map(module => ({ module, allowed: isAdmin || allowed.includes(module) }))
+    };
+}
+
+function getAccountingHealthV080(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const month = String(data.month || String(new Date().getMonth() + 1).padStart(2, '0')).padStart(2, '0');
+    const paramsCompany = companyId ? [companyId] : [];
+    const companyJoinFilter = companyId ? 'AND ba.company_id = ?' : '';
+    const docCompanyFilter = companyId ? 'AND company_id = ?' : '';
+    const cashCompanyFilter = companyId ? 'AND company_id = ?' : '';
+
+    const bankRows = db.prepare(`
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN COALESCE(t.category,'') = '' THEN 1 ELSE 0 END) AS uncategorized,
+               SUM(CASE WHEN COALESCE(t.status,'missing') IN ('missing','review','to_review') THEN 1 ELSE 0 END) AS toReview
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        WHERE substr(COALESCE(t.date_operation,''),1,4) = ?
+          AND substr(COALESCE(t.date_operation,''),6,2) = ?
+          ${companyJoinFilter}
+    `).get(year, month, ...paramsCompany) || {};
+
+    const docRows = db.prepare(`
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN COALESCE(validation_status,'pending') IN ('pending','to_review','review') THEN 1 ELSE 0 END) AS toValidate,
+               SUM(CASE WHEN COALESCE(status,'unmatched') IN ('unmatched','missing','a_rapprocher','À rapprocher') THEN 1 ELSE 0 END) AS unmatched,
+               SUM(CASE WHEN COALESCE(payment_status,'') IN ('due','to_pay','a_payer','À payer') THEN COALESCE(amount_ttc, detected_amount, 0) ELSE 0 END) AS billsToPay
+        FROM documents
+        WHERE (deleted_at IS NULL OR deleted_at = '')
+          AND COALESCE(NULLIF(accounting_period_year,''), substr(COALESCE(invoice_date, detected_date, added_at),1,4)) = ?
+          AND COALESCE(NULLIF(accounting_period_month,''), substr(COALESCE(invoice_date, detected_date, added_at),6,2)) = ?
+          ${docCompanyFilter}
+    `).get(year, month, ...paramsCompany) || {};
+
+    const cashRows = db.prepare(`
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN COALESCE(is_invalid,0) = 1 THEN 1 ELSE 0 END) AS invalid
+        FROM cash_sheets
+        WHERE period_year = ? AND period_month = ? ${cashCompanyFilter}
+    `).get(year, month, ...paramsCompany) || {};
+
+    let vat = { totals: { collected: 0, deductible: 0, balance: 0, missingVat: 0 }, months: [] };
+    try { vat = getVatCenterV073({ companyId, year }); } catch (_) {}
+    const vatMonth = (vat.months || []).find(row => row.month === month) || { collected: 0, deductible: 0, balance: 0, missingVat: 0 };
+
+    const checks = [
+        { key: 'bank', label: 'Banque', score: Number(bankRows.total || 0) ? Math.max(0, 100 - (Number(bankRows.uncategorized || 0) * 4) - (Number(bankRows.toReview || 0) * 3)) : 70, detail: `${Number(bankRows.uncategorized || 0)} opération(s) sans catégorie · ${Number(bankRows.toReview || 0)} à contrôler` },
+        { key: 'documents', label: 'Documents', score: Number(docRows.total || 0) ? Math.max(0, 100 - (Number(docRows.toValidate || 0) * 8) - (Number(docRows.unmatched || 0) * 4)) : 75, detail: `${Number(docRows.toValidate || 0)} à valider · ${Number(docRows.unmatched || 0)} à rapprocher` },
+        { key: 'cash', label: 'Caisse', score: Number(cashRows.invalid || 0) ? 30 : (Number(cashRows.total || 0) ? 100 : 65), detail: Number(cashRows.total || 0) ? `${Number(cashRows.total || 0)} feuille(s) importée(s)` : 'Aucune feuille de caisse pour le mois' },
+        { key: 'vat', label: 'TVA', score: Number(vatMonth.missingVat || 0) ? 55 : ((Number(vatMonth.collected || 0) || Number(vatMonth.deductible || 0)) ? 90 : 70), detail: `Solde estimé ${Number(vatMonth.balance || 0).toFixed(2)} € · ${Number(vatMonth.missingVat || 0)} facture(s) sans TVA` },
+        { key: 'matching', label: 'Rapprochements', score: Number(docRows.unmatched || 0) ? Math.max(0, 100 - Number(docRows.unmatched || 0) * 5) : 100, detail: `${Number(docRows.unmatched || 0)} document(s) à rapprocher` }
+    ];
+    const score = Math.round(checks.reduce((sum, c) => sum + Number(c.score || 0), 0) / checks.length);
+    return {
+        companyId: companyId || null,
+        year,
+        month,
+        score,
+        status: score >= 85 ? 'ok' : score >= 65 ? 'warning' : 'danger',
+        checks,
+        totals: {
+            transactions: Number(bankRows.total || 0),
+            documents: Number(docRows.total || 0),
+            billsToPay: Number(docRows.billsToPay || 0),
+            cashSheets: Number(cashRows.total || 0),
+            vatBalance: Number(vatMonth.balance || 0)
+        }
+    };
+}
+
+
+function getPeriodLockV083(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || data.periodYear || '').trim();
+    const month = String(data.month || data.periodMonth || '').padStart(2, '0');
+    if (!companyId || !year || !month) return { locked: false, companyId: companyId || null, year, month };
+    const row = db.prepare(`
+        SELECT * FROM accounting_period_locks
+        WHERE company_id = ? AND period_year = ? AND period_month = ?
+        LIMIT 1
+    `).get(companyId, year, month);
+    return {
+        companyId,
+        year,
+        month,
+        locked: Boolean(row && Number(row.locked || 0) === 1),
+        lockedAt: row?.locked_at || '',
+        lockedBy: row?.locked_by || '',
+        note: row?.note || ''
+    };
+}
+
+function isAccountingPeriodLockedV083(companyId, year, month) {
+    return Boolean(getPeriodLockV083({ companyId, year, month }).locked);
+}
+
+function setPeriodLockV083(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || data.periodYear || '').trim();
+    const month = String(data.month || data.periodMonth || '').padStart(2, '0');
+    const locked = data.locked === false || Number(data.locked) === 0 ? 0 : 1;
+    const actor = String(data.actor || data.user || '').trim();
+    const note = String(data.note || '').trim();
+    if (!companyId || !year || !month) return { ok: false, reason: 'Période incomplète.' };
+    db.prepare(`
+        INSERT INTO accounting_period_locks(company_id, period_year, period_month, locked, locked_at, locked_by, unlocked_at, unlocked_by, note, updated_at)
+        VALUES(?, ?, ?, ?, CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END, ?, CASE WHEN ? = 0 THEN CURRENT_TIMESTAMP ELSE NULL END, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(company_id, period_year, period_month) DO UPDATE SET
+            locked = excluded.locked,
+            locked_at = CASE WHEN excluded.locked = 1 THEN CURRENT_TIMESTAMP ELSE accounting_period_locks.locked_at END,
+            locked_by = CASE WHEN excluded.locked = 1 THEN excluded.locked_by ELSE accounting_period_locks.locked_by END,
+            unlocked_at = CASE WHEN excluded.locked = 0 THEN CURRENT_TIMESTAMP ELSE accounting_period_locks.unlocked_at END,
+            unlocked_by = CASE WHEN excluded.locked = 0 THEN excluded.unlocked_by ELSE accounting_period_locks.unlocked_by END,
+            note = excluded.note,
+            updated_at = CURRENT_TIMESTAMP
+    `).run(companyId, year, month, locked, locked, actor, locked, actor, note);
+    try { addAuditLogV080({ companyId, actionType: locked ? 'period_locked' : 'period_unlocked', entityType: 'accounting_period', entityId: `${year}-${month}`, label: `${locked ? 'Période verrouillée' : 'Période déverrouillée'} : ${year}-${month}`, details: { actor, note } }); } catch (_) {}
+    return { ok: true, ...getPeriodLockV083({ companyId, year, month }) };
+}
+
+function getExpertDossierV083(data = {}) {
+    const companyId = Number(data.companyId || 0);
+    const year = String(data.year || new Date().getFullYear());
+    const month = String(data.month || String(new Date().getMonth() + 1).padStart(2, '0')).padStart(2, '0');
+    const health = getAccountingHealthV080({ companyId, year, month });
+    const preview = getAccountingExportPreviewV0456({ companyId, year, month, mode: 'transmission' });
+    const archive = getAccountingExportPreviewV0456({ companyId, year, month, mode: 'archive' });
+    const lock = getPeriodLockV083({ companyId, year, month });
+    const docs = preview?.documents || [];
+    const statements = preview?.statements || [];
+    const checks = [
+        { key: 'documents', label: 'Documents', ok: Number(health.checks?.find(c => c.key === 'documents')?.score || 0) >= 80, detail: health.checks?.find(c => c.key === 'documents')?.detail || '' },
+        { key: 'bank', label: 'Banque', ok: Number(health.checks?.find(c => c.key === 'bank')?.score || 0) >= 80, detail: health.checks?.find(c => c.key === 'bank')?.detail || '' },
+        { key: 'cash', label: 'Caisse', ok: Number(health.checks?.find(c => c.key === 'cash')?.score || 0) >= 80, detail: health.checks?.find(c => c.key === 'cash')?.detail || '' },
+        { key: 'vat', label: 'TVA', ok: Number(health.checks?.find(c => c.key === 'vat')?.score || 0) >= 80, detail: health.checks?.find(c => c.key === 'vat')?.detail || '' },
+        { key: 'matching', label: 'Rapprochements', ok: Number(health.checks?.find(c => c.key === 'matching')?.score || 0) >= 80, detail: health.checks?.find(c => c.key === 'matching')?.detail || '' }
+    ];
+    const readyScore = Math.round((Number(health.score || 0) * 0.7) + (checks.filter(c => c.ok).length / checks.length * 100 * 0.3));
+    return {
+        companyId,
+        year,
+        month,
+        periodLabel: `${year}-${month}`,
+        readyScore,
+        status: readyScore >= 90 ? 'ready' : readyScore >= 70 ? 'to_review' : 'incomplete',
+        locked: lock.locked,
+        lock,
+        checks,
+        exportPreview: {
+            documentsCount: docs.length,
+            statementsCount: statements.length,
+            totalTtc: Number(preview?.totals?.totalTtc || 0),
+            archiveDocumentsCount: (archive?.documents || []).length,
+            archiveStatementsCount: (archive?.statements || []).length
+        },
+        missing: checks.filter(c => !c.ok).map(c => ({ key: c.key, label: c.label, detail: c.detail }))
+    };
+}
+
+function getThirdPartyTransactionsV083(data = {}) {
+    const thirdPartyId = Number(data.thirdPartyId || 0);
+    const year = data.year && data.year !== 'all' ? String(data.year) : '';
+    if (!thirdPartyId) return { transactions: [], totals: { debit: 0, credit: 0, count: 0 } };
+    const third = db.prepare(`SELECT * FROM third_parties WHERE id = ?`).get(thirdPartyId);
+    if (!third) return { transactions: [], totals: { debit: 0, credit: 0, count: 0 } };
+    const where = ['t.third_party_id = ?'];
+    const params = [thirdPartyId];
+    if (year) { where.push(`COALESCE(s.statement_year, substr(t.date_operation,1,4), substr(t.date_operation,-4)) = ?`); params.push(year); }
+    const rows = db.prepare(`
+        SELECT t.id, t.date_operation AS date, t.label, t.amount, t.category, t.status,
+               ba.bank_name AS bankName, ba.account_name AS accountName, s.filename AS statementFilename,
+               COUNT(r.id) AS receiptsCount
+        FROM bank_transactions t
+        LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+        LEFT JOIN statements s ON s.id = t.statement_id
+        LEFT JOIN receipts r ON r.transaction_id = t.id
+        WHERE ${where.join(' AND ')}
+        GROUP BY t.id
+        ORDER BY COALESCE(t.date_operation,'') DESC, t.id DESC
+        LIMIT 500
+    `).all(...params);
+    const totals = rows.reduce((acc, row) => {
+        const amount = Number(row.amount || 0);
+        if (amount < 0) acc.debit += Math.abs(amount); else acc.credit += amount;
+        acc.count += 1;
+        return acc;
+    }, { debit: 0, credit: 0, count: 0 });
+    return { thirdParty: third, transactions: rows, totals };
+}
 
 module.exports = {
     db,
@@ -2153,6 +5386,9 @@ module.exports = {
 
     createCompany,
     getCompanies,
+    updateCompany,
+    getCompanyDeletionPreview,
+    deleteCompany,
 
     createBankAccount,
     updateBankAccount,
@@ -2187,6 +5423,10 @@ module.exports = {
     deleteDocument,
     linkDocumentToTransaction,
     findDocumentMatches,
+    getSmartDocumentMatchesV045,
+    autoReconcileDocumentsV045,
+    getAccountingAlertsV045,
+    getReconciliationDashboardV045,
     searchTransactionsForDocument,
 
     createReceipt,
@@ -2195,6 +5435,12 @@ module.exports = {
     deleteReceipt,
 
     getThirdParties,
+    getThirdPartyYears,
+    getThirdPartyTypeOptionsV0423,
+    applyBusinessRulesToThirdPartiesV0423,
+    updateThirdPartyTypeEverywhere,
+    cleanupThirdParties,
+    mergeThirdParties,
     backfillThirdParties,
     updateTransactionThirdParty,
     inferThirdPartyFromLabel,
@@ -2213,13 +5459,78 @@ module.exports = {
     toggleDocumentImportant,
     updateDocumentThirdParty,
     getDocumentHistory,
+    createAutomationRule,
+    getAutomationRules,
+    deleteAutomationRule,
+    updateAutomationRule,
+    renameCategoryEverywhere,
+    updateCategoryUsage,
+    deleteCategoryRule,
+    applyAutomationRules,
     cleanupOrphanDocumentLinks,
     findExistingDocumentByHashOrName,
     refreshTransactionStatusFromDocuments,
     createCashSheet,
     getCashSheets,
+    findCashSheetByCompanyPeriod,
+    deleteCashSheetsByCompanyPeriod,
+    deleteCashSheet,
+    deleteInvalidCashSheetsV070,
+    learnCategoryFromTransactionV070,
     getCashSheetInsights,
     getCompanyDashboard,
+    getLatestStatementsTreasury,
     getCashSheetReminders,
-    renameDocument
+    renameDocument,
+    splitThirdPartyByKeywordV042,
+    saveThirdPartyAliasRuleV042,
+    getThirdPartyAliasPreviewV042,
+    getTechnicalSettingsSnapshotV043,
+    getThirdPartyAliasesV043,
+    deleteThirdPartyAliasV043,
+    getThirdPartyCanonicalListV043,
+    createOrUpdateCanonicalThirdPartyV043,
+    deleteCanonicalThirdPartyV043,
+    runTechnicalMaintenanceV043,
+    updateDocumentAccountingV0452,
+    saveDocumentLearningRuleV0452,
+    saveUserLearningEvent,
+    getUserLearningEvents,
+    saveDocumentLearningRulesV0452,
+    getDocumentLearningRulesV0452,
+    deleteDocumentLearningRuleV0452,
+    applyDocumentLearningToAnalysisV0452,
+    getDocumentsToValidateV0452,
+    findMultipleDocumentMatchesForTransactionV0456,
+    linkMultipleDocumentsToTransactionV0456,
+    getDocumentPaymentSummaryV0456,
+    getAccountingExportPreviewV0456,
+    createAccountingTransmissionExportV0456,
+    createAccountingArchiveV0456,
+    getAccountingExportLotsV0456,
+    getExecutiveDashboardV046,
+    getFinancialIntelligenceV049,
+    addOrReinforceAutomationRuleV072,
+    getBankAutomationSuggestionsV072,
+    applyBankAutomationSuggestionsV072,
+    getAutomationStatsV072,
+    getVatCenterV073,
+    addAuditLogV080,
+    getAuditLogV080,
+    getAccountingHealthV080,
+    getAppRolesV080,
+    getAppUsersV080,
+    getAppRolesV081,
+    getAppUsersV081,
+    getCurrentUserV081,
+    setCurrentUserV081,
+    createAppUserV081,
+    updateAppUserV081,
+    disableAppUserV081,
+    getUserPermissionsSummaryV081,
+    getPeriodLockV083,
+    setPeriodLockV083,
+    isAccountingPeriodLockedV083,
+    getExpertDossierV083,
+    getThirdPartyTransactionsV083
 };
