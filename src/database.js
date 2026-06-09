@@ -1777,6 +1777,27 @@ function getDocument(documentId) {
     return db.prepare(`SELECT * FROM documents WHERE id = ?`).get(documentId);
 }
 
+
+function findDocumentForFileOpenV089(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+
+    return db.prepare(`
+        SELECT *
+        FROM documents
+        WHERE deleted_at IS NULL
+          AND (
+            filepath = ?
+            OR local_cache_path = ?
+            OR filename = ?
+            OR s3_key = ?
+          )
+        ORDER BY id DESC
+        LIMIT 1
+    `).get(raw, raw, path.basename(raw), raw);
+}
+
+
 function deleteDocument(documentId) {
     return moveDocumentToTrash(documentId);
 }
@@ -5391,6 +5412,31 @@ function getThirdPartyTransactionsV083(data = {}) {
 }
 
 
+
+function updateDocumentLocalFilepathV0893(documentId, filepath) {
+    const id = Number(documentId || 0);
+    const nextPath = String(filepath || '').trim();
+    if (!id || !nextPath) return { ok: false, message: 'Identifiant document ou chemin manquant.' };
+
+    const doc = getDocument(id);
+    if (!doc) return { ok: false, message: 'Document introuvable.' };
+
+    const result = db.prepare(`
+        UPDATE documents
+        SET filepath = ?,
+            local_cache_path = ?
+        WHERE id = ?
+    `).run(nextPath, nextPath, id);
+
+    try {
+        if (doc.filepath && doc.filepath !== nextPath) {
+            db.prepare(`UPDATE receipts SET filepath = ? WHERE filepath = ?`).run(nextPath, doc.filepath);
+        }
+    } catch (_) {}
+
+    return { ok: result.changes > 0, filepath: nextPath, previousFilepath: doc.filepath || '' };
+}
+
 function updateDocumentStorageMetadataV088(documentId, metadata = {}) {
     const id = Number(documentId);
     if (!id) {
@@ -5560,11 +5606,13 @@ module.exports = {
 
     createDocument,
     updateDocumentStorageMetadataV088,
+    updateDocumentLocalFilepathV0893,
     getS3DocumentSyncOverviewV0883,
     getS3DocumentSyncIssuesV0883,
     createDocumentForReceipt,
     getDocuments,
     getDocument,
+    findDocumentForFileOpenV089,
     deleteDocument,
     linkDocumentToTransaction,
     findDocumentMatches,

@@ -9,6 +9,7 @@ const {
     getS3Config,
     testS3Connection,
     uploadFileToS3,
+    downloadFileFromS3,
     createGedObjectKey,
     moveObjectInS3
 } = require('./storage/s3Storage');
@@ -53,6 +54,7 @@ const {
     createDocumentForReceipt,
     getDocuments,
     getDocument,
+    findDocumentForFileOpenV089,
     deleteDocument,
     linkDocumentToTransaction,
     findDocumentMatches,
@@ -157,6 +159,7 @@ const {
     getExpertDossierV083,
     getThirdPartyTransactionsV083,
     updateDocumentStorageMetadataV088,
+    updateDocumentLocalFilepathV0893,
     getS3DocumentSyncOverviewV0883,
     getS3DocumentSyncIssuesV0883
 } = require('./database');
@@ -748,6 +751,146 @@ async function relocateDocumentS3V088(documentId, reason = 'ged_update') {
     }
 }
 
+
+
+function chooseDocumentCachePathV089(doc = {}) {
+    // V0.89.2 : le cache restauré depuis S3 doit reprendre le nom courant de la GED,
+    // pas forcément l'ancien chemin local stocké en base avant renommage/changement de type.
+    const desiredFilename = safeFilename(
+        doc.filename
+        || path.basename(doc.filepath || '')
+        || path.basename(doc.local_cache_path || '')
+        || path.basename(doc.s3_key || '')
+        || `document-${doc.id || Date.now()}.bin`
+    );
+
+    const dateValue = doc.detected_date || doc.invoice_date || doc.added_at || '';
+    const period = getDocumentYearMonthForS3V088({ documentDate: dateValue });
+    const targetDir = path.join(RECEIPTS_DIR, 'Documents', period.year, period.month);
+
+    // V0.89.3b : le chemin cible est toujours recalculé depuis la date GED actuelle.
+    // Même si un fichier au même nom existe dans l'ancien mois, il doit être déplacé.
+    return path.join(targetDir, desiredFilename);
+}
+
+async function ensureDocumentLocalCacheV089(doc = {}) {
+    if (!doc || !doc.id) {
+        return { ok: false, message: 'Document introuvable.' };
+    }
+
+    const localPath = chooseDocumentCachePathV089(doc);
+    if (localPath && fs.existsSync(localPath)) {
+        return { ok: true, filepath: localPath, source: 'local' };
+    }
+
+    if (!doc.s3_key) {
+        return { ok: false, message: 'Fichier local introuvable et aucune clé S3 disponible.' };
+    }
+
+    const config = getS3Config();
+    if (!config.isConfigured) {
+        return { ok: false, message: 'Fichier local introuvable et OVH S3 n’est pas configuré.' };
+    }
+
+    try {
+        const download = await downloadFileFromS3(doc.s3_key, localPath);
+        updateDocumentStorageMetadataV088(doc.id, {
+            storageProvider: doc.storage_provider || 'local+s3',
+            s3Bucket: doc.s3_bucket || download.bucket || config.bucket,
+            s3Key: doc.s3_key,
+            s3Etag: doc.s3_etag || download.etag || '',
+            s3Region: doc.s3_region || config.region,
+            s3Endpoint: doc.s3_endpoint || config.endpoint,
+            mimeType: doc.mime_type || download.contentType || mimeTypeFromFilepathV088(localPath),
+            fileSize: download.size || doc.file_size || null,
+            localCachePath: localPath,
+            syncStatus: 'synced',
+            uploadedAt: doc.uploaded_at || null,
+            lastSyncAt: new Date().toISOString()
+        });
+
+        return { ok: true, filepath: localPath, source: 's3', download };
+    } catch (error) {
+        try {
+            updateDocumentStorageMetadataV088(doc.id, {
+                storageProvider: doc.storage_provider || 'local+s3',
+                s3Bucket: doc.s3_bucket || config.bucket,
+                s3Key: doc.s3_key || '',
+                s3Etag: doc.s3_etag || '',
+                s3Region: doc.s3_region || config.region,
+                s3Endpoint: doc.s3_endpoint || config.endpoint,
+                mimeType: doc.mime_type || '',
+                fileSize: doc.file_size ?? null,
+                localCachePath: localPath,
+                syncStatus: 'sync_error',
+                uploadedAt: doc.uploaded_at || null,
+                lastSyncAt: new Date().toISOString()
+            });
+        } catch (_) {}
+
+        return { ok: false, message: `Téléchargement OVH S3 impossible : ${error.message}`, error: error.message };
+    }
+}
+
+
+function isInsideDataRootV0893(filepath = '') {
+    try {
+        const resolved = path.resolve(String(filepath || ''));
+        const dataRoot = path.resolve(DATA_DIR);
+        return resolved.startsWith(dataRoot);
+    } catch (_) {
+        return false;
+    }
+}
+
+async function alignDocumentLocalCacheV0893(documentId, reason = 'ged_update') {
+    const doc = getDocument(documentId);
+    if (!doc || !doc.id) return { ok: false, skipped: true, message: 'Document introuvable.' };
+
+    const desiredPath = chooseDocumentCachePathV089(doc);
+    if (!desiredPath) return { ok: false, skipped: true, message: 'Chemin GED local impossible à calculer.' };
+
+    const candidates = [doc.filepath, doc.local_cache_path]
+        .map(value => String(value || '').trim())
+        .filter(Boolean);
+
+    const existingSource = candidates.find(candidate => {
+        try { return fs.existsSync(candidate); } catch (_) { return false; }
+    });
+
+    if (existingSource && path.resolve(existingSource) === path.resolve(desiredPath)) {
+        try { updateDocumentLocalFilepathV0893(doc.id, desiredPath); } catch (_) {}
+        return { ok: true, skipped: true, reason, filepath: desiredPath, message: 'Cache local déjà aligné.' };
+    }
+
+    // Si le fichier local n’existe plus, on met quand même la base sur le chemin GED attendu.
+    // Le cache sera recréé depuis S3 au prochain aperçu / double-clic.
+    if (!existingSource) {
+        try { updateDocumentLocalFilepathV0893(doc.id, desiredPath); } catch (_) {}
+        return { ok: true, skipped: true, reason, filepath: desiredPath, message: 'Fichier local absent : chemin GED préparé pour la prochaine restauration S3.' };
+    }
+
+    try {
+        ensureDir(path.dirname(desiredPath));
+
+        if (fs.existsSync(desiredPath) && path.resolve(existingSource) !== path.resolve(desiredPath)) {
+            return { ok: false, skipped: true, reason, filepath: existingSource, target: desiredPath, message: 'Un fichier existe déjà au nouvel emplacement local.' };
+        }
+
+        // On ne déplace que les fichiers gérés par FocusComptaData, jamais un fichier externe utilisateur.
+        if (!isInsideDataRootV0893(existingSource)) {
+            updateDocumentLocalFilepathV0893(doc.id, desiredPath);
+            return { ok: true, skipped: true, reason, filepath: desiredPath, message: 'Chemin GED préparé, source externe non déplacée.' };
+        }
+
+        fs.renameSync(existingSource, desiredPath);
+        updateDocumentLocalFilepathV0893(doc.id, desiredPath);
+        return { ok: true, reason, oldPath: existingSource, newPath: desiredPath };
+    } catch (error) {
+        console.warn('Alignement cache local GED impossible pour le document', documentId, error.message);
+        return { ok: false, reason, error: error.message, filepath: existingSource, target: desiredPath };
+    }
+}
 
 function uniqueDestination(dir, filename) {
     ensureDir(dir);
@@ -2619,7 +2762,13 @@ ipcMain.handle('add-documents', async (event, data) => {
 });
 
 ipcMain.handle('update-document-accounting-v0452', async (event, data) => {
-    return updateDocumentAccountingV0452(data || {});
+    const updated = updateDocumentAccountingV0452(data || {});
+    const documentId = Number(data?.documentId || data?.id || updated?.id || 0);
+    if (documentId) {
+        updated.localSync = await alignDocumentLocalCacheV0893(documentId, 'accounting_update');
+        updated.s3Sync = await relocateDocumentS3V088(documentId, 'accounting_update');
+    }
+    return updated;
 });
 
 ipcMain.handle('save-document-learning-rules-v0452', async (event, data) => {
@@ -2648,15 +2797,36 @@ ipcMain.handle('get-documents-to-validate-v0452', async (event, companyId) => {
 });
 
 
-ipcMain.handle('get-document-preview-data-v0453', async (event, filepath) => {
-    if (!filepath || !fs.existsSync(filepath)) return null;
+ipcMain.handle('get-document-preview-data-v0453', async (event, input) => {
+    let filepath = typeof input === 'string' ? input : (input?.filepath || input?.path || '');
+    const documentId = typeof input === 'object' && input ? (input.documentId || input.id) : null;
+
+    if ((!filepath || !fs.existsSync(filepath))) {
+        const doc = documentId
+            ? getDocument(documentId)
+            : findDocumentForFileOpenV089(filepath);
+
+        if (doc) {
+            const cache = await ensureDocumentLocalCacheV089(doc);
+            if (cache.ok && cache.filepath) {
+                filepath = cache.filepath;
+            } else {
+                return { ok: false, message: cache.message || 'Aperçu indisponible.' };
+            }
+        }
+    }
+
+    if (!filepath || !fs.existsSync(filepath)) {
+        return { ok: false, message: 'Fichier local introuvable et récupération S3 impossible.' };
+    }
+
     const ext = path.extname(filepath).toLowerCase();
     const mime = ext === '.pdf' ? 'application/pdf' :
         ext === '.png' ? 'image/png' :
         ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
         ext === '.webp' ? 'image/webp' : 'application/octet-stream';
     const buffer = fs.readFileSync(filepath);
-    return { mime, dataUrl: `data:${mime};base64,${buffer.toString('base64')}` };
+    return { ok: true, mime, filepath, dataUrl: `data:${mime};base64,${buffer.toString('base64')}` };
 });
 
 ipcMain.handle('get-documents', async (event, data) => {
@@ -2759,6 +2929,7 @@ ipcMain.handle('get-documents-dashboard', async (event, data) => {
 ipcMain.handle('rename-document', async (event, data) => {
     const result = renameDocument(data.documentId, data.newFilename);
     if (result && result.ok) {
+        result.localSync = await alignDocumentLocalCacheV0893(data.documentId, 'rename');
         result.s3Sync = await relocateDocumentS3V088(data.documentId, 'rename');
     }
     return result;
@@ -2815,6 +2986,7 @@ ipcMain.handle('update-document-type', async (event, data) => {
     const result = updateDocumentType(data.documentId, data.docType);
     const changed = result && (result.changes === undefined || result.changes > 0);
     if (changed) {
+        result.localSync = await alignDocumentLocalCacheV0893(data.documentId, 'type_update');
         result.s3Sync = await relocateDocumentS3V088(data.documentId, 'type_update');
     }
     return result;
@@ -2823,6 +2995,7 @@ ipcMain.handle('update-document-type', async (event, data) => {
 ipcMain.handle('move-document-folder', async (event, data) => {
     const result = moveDocumentToFolder(data.documentId, data.folderPath);
     if (result && result.ok) {
+        result.localSync = await alignDocumentLocalCacheV0893(data.documentId, 'folder_update');
         result.s3Sync = await relocateDocumentS3V088(data.documentId, 'folder_update');
     }
     return result;
@@ -2841,7 +3014,12 @@ ipcMain.handle('move-document', async (event, data) => {
         folderPath = `${company}/Documents/${data.year || 'SansAnnee'}/${data.month || 'SansMois'}`;
     }
 
-    return moveDocumentToFolder(data.documentId, folderPath);
+    const result = moveDocumentToFolder(data.documentId, folderPath);
+    if (result && result.ok) {
+        result.localSync = await alignDocumentLocalCacheV0893(data.documentId, 'move_document');
+        result.s3Sync = await relocateDocumentS3V088(data.documentId, 'move_document');
+    }
+    return result;
 });
 
 
@@ -3070,9 +3248,34 @@ ipcMain.handle('apply-bank-automation-suggestions-v072', async (event, data) => 
     return applyBankAutomationSuggestionsV072(data || {});
 });
 
-ipcMain.handle('open-file', async (event, filepath) => {
-    await shell.openPath(filepath);
-    return true;
+ipcMain.handle('open-file', async (event, input) => {
+    const filepath = typeof input === 'string' ? input : (input?.filepath || input?.path || '');
+    const documentId = typeof input === 'object' && input ? (input.documentId || input.id) : null;
+
+    if (filepath && fs.existsSync(filepath)) {
+        const openResult = await shell.openPath(filepath);
+        return openResult ? { ok: false, message: openResult } : { ok: true, filepath, source: 'local' };
+    }
+
+    const doc = documentId
+        ? getDocument(documentId)
+        : findDocumentForFileOpenV089(filepath);
+
+    if (doc) {
+        const cache = await ensureDocumentLocalCacheV089(doc);
+        if (!cache.ok) return cache;
+
+        const openResult = await shell.openPath(cache.filepath);
+        return openResult
+            ? { ok: false, message: openResult, filepath: cache.filepath, source: cache.source }
+            : { ok: true, filepath: cache.filepath, source: cache.source };
+    }
+
+    if (!filepath) {
+        return { ok: false, message: 'Chemin de fichier manquant.' };
+    }
+
+    return { ok: false, message: `Fichier introuvable : ${filepath}` };
 });
 
 ipcMain.handle('create-backup', async () => {
