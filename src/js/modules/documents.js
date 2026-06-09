@@ -2067,3 +2067,193 @@ if (typeof window !== 'undefined') {
     window.documentDisplayStatusV0542 = documentDisplayStatusV0542;
     window.closeDocumentPreviewPanelV0542 = closeDocumentPreviewPanelV0542;
 }
+
+
+// V0.89.1 - Aperçu sécurisé GED + OVH S3
+// Le double-clic utilisait déjà le secours S3 via main.js. L'aperçu, lui, pointait
+// encore directement vers file:///... ; si le cache local était absent, l'iframe PDF
+// restait vide. Cette surcouche demande maintenant au process principal de recréer
+// le cache local depuis S3 avant d'afficher l'aperçu.
+async function renderSecureDocumentPreviewV0891(doc) {
+    try {
+        const preview = document.getElementById('documentPreviewV033');
+        if (!preview || !doc || previewTabV036 !== 'preview') return;
+
+        const lower = String(doc.filename || '').toLowerCase();
+        if (!/\.(pdf|jpg|jpeg|png|webp)$/i.test(lower)) return;
+
+        preview.innerHTML = '<div class="pdf-placeholder-v033">⏳<br>Chargement de l’aperçu sécurisé...</div>';
+
+        const data = await window.api.getDocumentPreviewDataV0453({
+            documentId: doc.id,
+            filepath: doc.filepath,
+            filename: doc.filename
+        });
+
+        if (!data || data.ok === false || !data.dataUrl) {
+            preview.innerHTML = `<div class="pdf-placeholder-v033">📄<br>${escapeHtmlV033(doc.filename || 'Document')}<br><span>${escapeHtmlV033(data?.message || 'Aperçu indisponible. Double-clic pour ouvrir.')}</span></div>`;
+            return;
+        }
+
+        if (lower.endsWith('.pdf')) {
+            preview.innerHTML = `<iframe class="pdf-frame-v034" src="${data.dataUrl}"></iframe>`;
+            return;
+        }
+
+        preview.innerHTML = `<img src="${data.dataUrl}" alt="${escapeHtmlV033(doc.filename || 'Document')}">`;
+    } catch (error) {
+        console.warn('Aperçu sécurisé OVH S3 impossible', error);
+    }
+}
+
+if (!window.__focusSecureDocumentPreviewV0891 && typeof renderDocumentPreviewV033 === 'function') {
+    window.__focusSecureDocumentPreviewV0891 = true;
+    const renderDocumentPreviewBeforeV0891 = renderDocumentPreviewV033;
+    renderDocumentPreviewV033 = function(doc) {
+        const result = renderDocumentPreviewBeforeV0891(doc);
+        renderSecureDocumentPreviewV0891(doc);
+        return result;
+    };
+}
+
+// ===========================
+// Focus Compta V0.90.1 - Interface corbeille GED
+// ===========================
+// Correctifs :
+// - le bouton haut "Corbeille" utilisait l'ancien libellé "Corbeille" au lieu de "🗑 Corbeille" ;
+//   il affichait donc une liste vide.
+// - la corbeille dans l'arborescence n'affichait pas le bon compteur car les documents supprimés
+//   ne sont pas chargés dans la liste GED normale.
+// - le menu contextuel d'un document en corbeille doit proposer Restaurer / Supprimer définitivement.
+
+async function refreshDocumentTrashCountV0901() {
+    try {
+        if (!window.api || !window.api.getDocuments) return;
+        const trashDocs = await window.api.getDocuments({
+            companyId: selectedCompany ? selectedCompany.id : null,
+            filters: { status: 'trash' }
+        });
+        const count = Array.isArray(trashDocs) ? trashDocs.length : 0;
+        window.__focusTrashCountV0901 = count;
+
+        document.querySelectorAll('[data-folder-path="🗑 Corbeille"]').forEach(button => {
+            const countNode = button.querySelector('.tree-count-v036');
+            if (countNode) countNode.textContent = count || '';
+        });
+
+        const topTrash = document.getElementById('showTrashV034');
+        if (topTrash) topTrash.dataset.trashCountV0901 = String(count);
+    } catch (error) {
+        console.warn('Compteur corbeille GED impossible à actualiser', error);
+    }
+}
+
+if (typeof renderDocumentTreeV033 === 'function' && !window.__focusTrashTreeCountV0901) {
+    window.__focusTrashTreeCountV0901 = true;
+    const renderDocumentTreeBeforeV0901 = renderDocumentTreeV033;
+    renderDocumentTreeV033 = function(docs) {
+        const result = renderDocumentTreeBeforeV0901(docs);
+        refreshDocumentTrashCountV0901();
+        return result;
+    };
+}
+
+if (!window.__focusTrashTopButtonV0901) {
+    window.__focusTrashTopButtonV0901 = true;
+    const bindTrashTopButtonV0901 = () => {
+        const trash = document.getElementById('showTrashV034');
+        if (!trash || trash.dataset.boundTrashV0901) return;
+        trash.dataset.boundTrashV0901 = '1';
+        trash.addEventListener('click', async event => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            selectedDocumentFolderV033 = '🗑 Corbeille';
+            activeSmartFolderV035 = '';
+            selectedDocumentV033 = null;
+            await loadDocuments();
+        }, true);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindTrashTopButtonV0901);
+    else bindTrashTopButtonV0901();
+}
+
+async function restoreDocumentFromTrashV0901(doc) {
+    if (!doc) return;
+    const confirmed = await confirmDocumentActionV0412(
+        'Restaurer le document',
+        `Restaurer ce document dans la GED ?\n\n${doc.filename}`,
+        'Restaurer'
+    );
+    if (!confirmed) return;
+
+    const result = await window.api.restoreDocument(doc.id);
+    if (result && result.ok === false) {
+        focusToastV041(result.message || 'Restauration impossible.', 'danger');
+        return;
+    }
+    focusToastV041('Document restauré.', 'success');
+    selectedDocumentV033 = null;
+    await loadDocuments();
+}
+
+async function deleteDocumentPermanentlyV0901(doc) {
+    if (!doc) return;
+    const confirmed = await confirmDocumentActionV0412(
+        'Suppression définitive',
+        `Supprimer définitivement ce document ?\n\nCette action supprime la fiche GED, le cache local et tente de supprimer l'objet S3.\n\n${doc.filename}`,
+        'Supprimer définitivement'
+    );
+    if (!confirmed) return;
+
+    const result = await window.api.deleteDocumentPermanently(doc.id);
+    if (result && result.ok === false) {
+        focusToastV041(result.message || 'Suppression définitive impossible.', 'danger');
+        return;
+    }
+    focusToastV041('Document supprimé définitivement.', 'success');
+    selectedDocumentV033 = null;
+    await loadDocuments();
+}
+
+if (typeof showDocumentContextMenuV037 === 'function' && !window.__focusTrashContextMenuV0901) {
+    window.__focusTrashContextMenuV0901 = true;
+    const showDocumentContextMenuBeforeV0901 = showDocumentContextMenuV037;
+    showDocumentContextMenuV037 = function(x, y, doc) {
+        const menu = document.getElementById('documentContextMenuV037');
+        if (!menu || !doc) return;
+
+        const isTrash = selectedDocumentFolderV033 === '🗑 Corbeille' || String(doc.status || '').toLowerCase() === 'trash';
+        if (!isTrash) return showDocumentContextMenuBeforeV0901(x, y, doc);
+
+        menu.innerHTML = `
+            <button data-action="open">📂 Ouvrir</button>
+            <button data-action="preview">👁 Aperçu</button>
+            <hr>
+            <button data-action="restore">↩️ Restaurer</button>
+            <button data-action="copy">📋 Copier le chemin</button>
+            <hr>
+            <button data-action="delete-permanent" class="danger-menu-action">🗑️ Supprimer définitivement</button>
+        `;
+
+        positionContextMenuV037(menu, x, y);
+
+        menu.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', async () => {
+                const action = button.dataset.action;
+                hideDocumentContextMenuV037();
+
+                if (action === 'open') await window.api.openFile(doc.filepath);
+                if (action === 'preview') renderDocumentPreviewV033(doc);
+                if (action === 'restore') await restoreDocumentFromTrashV0901(doc);
+                if (action === 'copy') {
+                    try {
+                        await navigator.clipboard.writeText(doc.filepath || doc.s3_key || '');
+                    } catch (error) {
+                        await askInputV0397('Chemin du fichier', 'Chemin du fichier', doc.filepath || doc.s3_key || '');
+                    }
+                }
+                if (action === 'delete-permanent') await deleteDocumentPermanentlyV0901(doc);
+            });
+        });
+    };
+}
