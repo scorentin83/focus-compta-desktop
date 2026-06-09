@@ -1,9 +1,8 @@
 node_modules/
-package-lock.json
 
-dist/
 build/
 out/
+dist/
 
 *.log
 *.tmp
@@ -12,3 +11,11 @@ out/
 Thumbs.db
 
 ThetaCompta.db
+
+FocusComptaData/
+FocusComptaBackups/
+
+.env
+*.db
+*.sqlite
+*.sqlite3
