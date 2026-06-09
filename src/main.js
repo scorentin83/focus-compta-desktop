@@ -7,7 +7,9 @@ const PDFParse = pdfParseModule.PDFParse;
 
 const {
     getS3Config,
-    uploadFileToS3
+    uploadFileToS3,
+    createGedObjectKey,
+    moveObjectInS3
 } = require('./storage/s3Storage');
 
 
@@ -552,6 +554,48 @@ function mimeTypeFromFilepathV088(filepath = '') {
     return 'application/octet-stream';
 }
 
+function getDocumentYearMonthForS3V088(options = {}) {
+    const raw = String(options.documentDate || options.detectedDate || options.invoiceDate || '').trim();
+    let match = raw.match(/\b(20\d{2})[\/._-](0?[1-9]|1[0-2])(?:[\/._-]([0-3]?\d))?\b/);
+    if (match) return { year: match[1], month: String(match[2]).padStart(2, '0') };
+
+    match = raw.match(/\b([0-3]?\d)[\/._-](0?[1-9]|1[0-2])[\/._-](20\d{2})\b/);
+    if (match) return { year: match[3], month: String(match[2]).padStart(2, '0') };
+
+    if (options.year && options.month) return { year: String(options.year), month: String(options.month).padStart(2, '0') };
+
+    return yearMonthFromDetectedDateV0393(raw || new Date().toISOString().slice(0, 10));
+}
+
+function extractS3UniquePrefixV088(s3Key = '') {
+    const basename = path.basename(String(s3Key || ''));
+    const match = basename.match(/^([a-f0-9]{16})-/i);
+    return match ? match[1] : '';
+}
+
+function buildDocumentS3OptionsV088(doc = {}, overrides = {}) {
+    const dateValue = overrides.documentDate || overrides.detectedDate || overrides.invoiceDate || doc.detected_date || doc.invoice_date || doc.added_at || '';
+    const period = getDocumentYearMonthForS3V088({
+        documentDate: dateValue,
+        year: overrides.year,
+        month: overrides.month
+    });
+
+    return {
+        companyId: overrides.companyId || doc.company_id || 'global',
+        docType: overrides.docType || doc.doc_type || 'document',
+        type: overrides.docType || doc.doc_type || 'document',
+        filename: overrides.filename || doc.filename || 'document.pdf',
+        documentDate: dateValue,
+        year: period.year,
+        month: period.month,
+        folderPath: overrides.folderPath ?? doc.folder_path ?? '',
+        layout: 'ged',
+        contentType: mimeTypeFromFilepathV088(overrides.filepath || doc.filepath || ''),
+        uniquePrefix: overrides.uniquePrefix || extractS3UniquePrefixV088(doc.s3_key || '')
+    };
+}
+
 async function syncDocumentToS3V088(documentId, localFilepath, options = {}) {
     if (!documentId || !localFilepath || !fs.existsSync(localFilepath)) {
         return { ok: false, skipped: true, message: 'Document local introuvable ou identifiant manquant.' };
@@ -575,11 +619,12 @@ async function syncDocumentToS3V088(documentId, localFilepath, options = {}) {
 
     try {
         const stats = fs.statSync(localFilepath);
+        const doc = getDocument(documentId) || {};
         const filename = options.filename || path.basename(localFilepath);
+        const s3Options = buildDocumentS3OptionsV088(doc, { ...options, filename, filepath: localFilepath });
 
         const upload = await uploadFileToS3(localFilepath, {
-            companyId: options.companyId || 'global',
-            type: options.type || 'documents',
+            ...s3Options,
             filename,
             contentType: mimeTypeFromFilepathV088(localFilepath)
         });
@@ -603,17 +648,99 @@ async function syncDocumentToS3V088(documentId, localFilepath, options = {}) {
     } catch (error) {
         console.warn('Synchronisation OVH S3 impossible pour le document', documentId, error.message);
 
+        const doc = getDocument(documentId) || {};
         try {
             updateDocumentStorageMetadataV088(documentId, {
-                storageProvider: 'local+s3',
+                storageProvider: doc.storage_provider || 'local+s3',
+                s3Bucket: doc.s3_bucket || '',
+                s3Key: doc.s3_key || '',
+                s3Etag: doc.s3_etag || '',
+                s3Region: doc.s3_region || config.region || '',
+                s3Endpoint: doc.s3_endpoint || config.endpoint || '',
                 syncStatus: 'sync_error',
                 localCachePath: localFilepath,
                 mimeType: mimeTypeFromFilepathV088(localFilepath),
                 fileSize: fs.existsSync(localFilepath) ? fs.statSync(localFilepath).size : null,
+                uploadedAt: doc.uploaded_at || null,
                 lastSyncAt: new Date().toISOString()
             });
         } catch (_) {}
 
+        return { ok: false, error: error.message };
+    }
+}
+
+async function relocateDocumentS3V088(documentId, reason = 'ged_update') {
+    const config = getS3Config();
+    const doc = getDocument(documentId);
+
+    if (!doc) return { ok: false, skipped: true, message: 'Document introuvable.' };
+    if (!config.isConfigured) return { ok: false, skipped: true, message: 'S3 non configuré.' };
+
+    if (!doc.s3_key) {
+        if (doc.filepath && fs.existsSync(doc.filepath)) {
+            return syncDocumentToS3V088(documentId, doc.filepath, buildDocumentS3OptionsV088(doc));
+        }
+        return { ok: false, skipped: true, message: 'Aucune clé S3 ni fichier local.' };
+    }
+
+    const nextKey = createGedObjectKey(buildDocumentS3OptionsV088(doc));
+
+    if (nextKey === doc.s3_key) {
+        try {
+            updateDocumentStorageMetadataV088(documentId, {
+                storageProvider: doc.storage_provider || 'local+s3',
+                s3Bucket: doc.s3_bucket || config.bucket,
+                s3Key: doc.s3_key,
+                s3Etag: doc.s3_etag || '',
+                s3Region: doc.s3_region || config.region,
+                s3Endpoint: doc.s3_endpoint || config.endpoint,
+                mimeType: doc.mime_type || mimeTypeFromFilepathV088(doc.filepath || ''),
+                fileSize: doc.file_size ?? (doc.filepath && fs.existsSync(doc.filepath) ? fs.statSync(doc.filepath).size : null),
+                localCachePath: doc.local_cache_path || doc.filepath || '',
+                syncStatus: 'synced',
+                uploadedAt: doc.uploaded_at || null,
+                lastSyncAt: new Date().toISOString()
+            });
+        } catch (_) {}
+        return { ok: true, skipped: true, key: nextKey };
+    }
+
+    try {
+        const moved = await moveObjectInS3(doc.s3_key, nextKey);
+        updateDocumentStorageMetadataV088(documentId, {
+            storageProvider: 'local+s3',
+            s3Bucket: moved.bucket || config.bucket,
+            s3Key: nextKey,
+            s3Etag: moved.etag || doc.s3_etag || '',
+            s3Region: config.region,
+            s3Endpoint: config.endpoint,
+            mimeType: doc.mime_type || mimeTypeFromFilepathV088(doc.filepath || ''),
+            fileSize: doc.file_size ?? (doc.filepath && fs.existsSync(doc.filepath) ? fs.statSync(doc.filepath).size : null),
+            localCachePath: doc.local_cache_path || doc.filepath || '',
+            syncStatus: 'synced',
+            uploadedAt: doc.uploaded_at || null,
+            lastSyncAt: new Date().toISOString()
+        });
+        return { ok: true, reason, oldKey: doc.s3_key, newKey: nextKey };
+    } catch (error) {
+        console.warn('Déplacement OVH S3 impossible pour le document', documentId, error.message);
+        try {
+            updateDocumentStorageMetadataV088(documentId, {
+                storageProvider: doc.storage_provider || 'local+s3',
+                s3Bucket: doc.s3_bucket || config.bucket,
+                s3Key: doc.s3_key,
+                s3Etag: doc.s3_etag || '',
+                s3Region: doc.s3_region || config.region,
+                s3Endpoint: doc.s3_endpoint || config.endpoint,
+                mimeType: doc.mime_type || mimeTypeFromFilepathV088(doc.filepath || ''),
+                fileSize: doc.file_size ?? null,
+                localCachePath: doc.local_cache_path || doc.filepath || '',
+                syncStatus: 'sync_error',
+                uploadedAt: doc.uploaded_at || null,
+                lastSyncAt: new Date().toISOString()
+            });
+        } catch (_) {}
         return { ok: false, error: error.message };
     }
 }
@@ -2464,8 +2591,14 @@ ipcMain.handle('add-documents', async (event, data) => {
             }
             const s3Sync = await syncDocumentToS3V088(result.lastInsertRowid, finalDoc.filepath, {
                 companyId: data.companyId || 'global',
-                type: data.docType || 'documents',
-                filename: finalDoc.filename
+                docType: data.docType || 'facture',
+                type: data.docType || 'facture',
+                filename: finalDoc.filename,
+                documentDate: analysis.invoiceDate || analysis.detectedDate || '',
+                year,
+                month,
+                folderPath: data.companyName ? `${data.companyName}/JUSTIFICATIFS/${year}/${month}` : `JUSTIFICATIFS/${year}/${month}`,
+                layout: 'ged'
             });
 
             added.push({
@@ -2621,7 +2754,11 @@ ipcMain.handle('get-documents-dashboard', async (event, data) => {
 });
 
 ipcMain.handle('rename-document', async (event, data) => {
-    return renameDocument(data.documentId, data.newFilename);
+    const result = renameDocument(data.documentId, data.newFilename);
+    if (result && result.ok) {
+        result.s3Sync = await relocateDocumentS3V088(data.documentId, 'rename');
+    }
+    return result;
 });
 
 ipcMain.handle('get-document-tree', async (event, data) => {
@@ -2672,11 +2809,20 @@ ipcMain.handle('delete-document-permanently', async (event, documentId) => {
 });
 
 ipcMain.handle('update-document-type', async (event, data) => {
-    return updateDocumentType(data.documentId, data.docType);
+    const result = updateDocumentType(data.documentId, data.docType);
+    const changed = result && (result.changes === undefined || result.changes > 0);
+    if (changed) {
+        result.s3Sync = await relocateDocumentS3V088(data.documentId, 'type_update');
+    }
+    return result;
 });
 
 ipcMain.handle('move-document-folder', async (event, data) => {
-    return moveDocumentToFolder(data.documentId, data.folderPath);
+    const result = moveDocumentToFolder(data.documentId, data.folderPath);
+    if (result && result.ok) {
+        result.s3Sync = await relocateDocumentS3V088(data.documentId, 'folder_update');
+    }
+    return result;
 });
 
 

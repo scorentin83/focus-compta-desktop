@@ -9,7 +9,7 @@
     "dist": "electron-builder --win",
     "dist:win": "electron-builder --win",
     "test:s3": "node scripts/test-s3.js",
-    "check:syntax": "node --check database.js && node --check main.js && node --check preload.js && node --check renderer.js && node --check scripts/test-s3.js && node --check src/storage/s3Storage.js"
+    "check:syntax": "node --check src/database.js && node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check scripts/test-s3.js && node --check src/storage/s3Storage.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.953.0",
