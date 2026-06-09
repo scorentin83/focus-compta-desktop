@@ -2,7 +2,7 @@
   "name": "focus-compta",
   "version": "0.87.0",
   "description": "Focus Compta — cockpit financier de pré-comptabilité pour PME et magasins d'optique.",
-  "main": "main.js",
+  "main": "src/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
