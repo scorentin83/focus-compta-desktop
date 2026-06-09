@@ -624,6 +624,7 @@
                     <button type="button" class="settings-tab-v043" data-settings-tab="businessRules">⚙️ Règles métier</button>
                     <button type="button" class="settings-tab-v043" data-settings-tab="documentLearning">🧾 Apprentissage documents</button>
                     <button type="button" class="settings-tab-v043" data-settings-tab="maintenance">🛠️ Maintenance</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="storageS3">☁️ Stockage OVH S3</button>
                     <button type="button" class="settings-tab-v043" data-settings-tab="interface">🎛️ Interface</button>
                 </aside>
 
@@ -794,6 +795,22 @@
                                 <button id="maintenanceFullV043" type="button" class="danger-soft-v043">Maintenance complète</button>
                             </div>
                             <pre id="maintenanceResultV043" class="settings-log-v043">Aucune opération lancée.</pre>
+                        </div>
+                    </div>
+
+
+
+                    <div class="settings-panel-v043" data-settings-panel="storageS3">
+                        <div class="panel clean-panel s3-status-panel-v0882">
+                            <div class="section-title-row compact-title-row">
+                                <div>
+                                    <span class="eyebrow">Stockage cloud</span>
+                                    <h2>OVH Object Storage S3</h2>
+                                </div>
+                                <button id="testS3StorageV0882" type="button">Tester la connexion</button>
+                            </div>
+                            <p class="muted">Contrôle de la connexion OVH S3 utilisée comme miroir cloud de la GED locale.</p>
+                            <div id="s3StatusV0882" class="s3-status-box-v0882 muted">Clique sur “Tester la connexion” pour vérifier OVH S3.</div>
                         </div>
                     </div>
 

@@ -7,6 +7,7 @@ const PDFParse = pdfParseModule.PDFParse;
 
 const {
     getS3Config,
+    testS3Connection,
     uploadFileToS3,
     createGedObjectKey,
     moveObjectInS3
@@ -2897,6 +2898,42 @@ ipcMain.handle('set-period-lock-v083', async (event, data) => {
 
 
 
+
+
+// V0.88.2 - Statut OVH S3 visible dans l'application
+ipcMain.handle('get-s3-storage-status-v0882', async () => {
+    const config = getS3Config();
+    const checkedAt = new Date().toISOString();
+    let connection = null;
+
+    try {
+        connection = await testS3Connection();
+    } catch (error) {
+        connection = {
+            ok: false,
+            message: 'Test OVH S3 impossible.',
+            error: error.message,
+            name: error.name
+        };
+    }
+
+    return {
+        ok: Boolean(connection && connection.ok),
+        provider: 'OVH Object Storage S3',
+        mode: 'GED miroir : local + OVH S3',
+        layout: 'focus-compta/companies/[société]/ged/[année]/[mois]/[type]/fichier',
+        checkedAt,
+        message: connection?.message || '',
+        error: connection?.error || '',
+        name: connection?.name || '',
+        bucket: config.bucket || connection?.bucket || '',
+        endpoint: config.endpoint || connection?.endpoint || '',
+        region: config.region || connection?.region || '',
+        isConfigured: Boolean(config.isConfigured),
+        hasAccessKey: Boolean(config.accessKeyId),
+        hasSecretKey: Boolean(config.secretAccessKey)
+    };
+});
 
 ipcMain.handle('get-technical-settings-snapshot-v043', async (event, companyId) => {
     return getTechnicalSettingsSnapshotV043(companyId || null);

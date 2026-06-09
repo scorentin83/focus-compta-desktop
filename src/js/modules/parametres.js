@@ -638,6 +638,54 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
         `;
     }
 
+
+
+    function formatS3CheckedAtV0882(value) {
+        if (!value) return '—';
+        try {
+            return new Date(value).toLocaleString('fr-FR');
+        } catch (error) {
+            return String(value);
+        }
+    }
+
+    async function renderS3StorageStatusV0882() {
+        const box = document.getElementById('s3StatusV0882');
+        if (!box || !window.api.getS3StorageStatusV0882) return;
+
+        box.className = 's3-status-box-v0882 muted';
+        box.innerHTML = '<p class="muted">Test de connexion OVH S3 en cours…</p>';
+
+        try {
+            const status = await window.api.getS3StorageStatusV0882();
+            const ok = Boolean(status.ok);
+            box.className = `s3-status-box-v0882 ${ok ? 's3-ok-v0882' : 's3-error-v0882'}`;
+            box.innerHTML = `
+                <div class="s3-status-header-v0882">
+                    <strong>${ok ? '✅ Connecté' : '⚠️ À vérifier'}</strong>
+                    <span>${escapeHtmlV043(status.provider || 'OVH S3')}</span>
+                </div>
+                <div class="snapshot-grid-v043 s3-status-grid-v0882">
+                    <div><strong>${escapeHtmlV043(status.bucket || '—')}</strong><span>Bucket</span></div>
+                    <div><strong>${escapeHtmlV043(status.region || '—')}</strong><span>Région</span></div>
+                    <div><strong>${status.isConfigured ? 'OK' : 'Incomplet'}</strong><span>Configuration</span></div>
+                    <div><strong>${formatS3CheckedAtV0882(status.checkedAt)}</strong><span>Dernier test</span></div>
+                </div>
+                <p><strong>Mode :</strong> ${escapeHtmlV043(status.mode || '')}</p>
+                <p><strong>Chemin GED :</strong> <code>${escapeHtmlV043(status.layout || '')}</code></p>
+                <p class="muted">${escapeHtmlV043(status.message || '')}${status.error ? ' — ' + escapeHtmlV043(status.error) : ''}</p>
+                <details class="s3-details-v0882">
+                    <summary>Détails techniques</summary>
+                    <p><strong>Endpoint :</strong> ${escapeHtmlV043(status.endpoint || '—')}</p>
+                    <p><strong>Access key :</strong> ${status.hasAccessKey ? 'présente' : 'absente'} · <strong>Secret key :</strong> ${status.hasSecretKey ? 'présente' : 'absente'}</p>
+                </details>
+            `;
+        } catch (error) {
+            box.className = 's3-status-box-v0882 s3-error-v0882';
+            box.innerHTML = `<p><strong>⚠️ Test impossible</strong></p><p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+        }
+    }
+
     async function loadTypeOptionsV043() {
         const selects = [
             document.getElementById('canonicalThirdPartyTypeV043'),
@@ -843,7 +891,8 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
             ['maintenanceBusinessRulesV043', () => runMaintenanceV043('businessRules')],
             ['maintenanceFullV043', () => runMaintenanceV043('full')],
             ['refreshDocumentLearningV0452', renderDocumentLearningV0452],
-            ['openDocumentsToValidateV0452', renderDocumentsToValidateV0452]
+            ['openDocumentsToValidateV0452', renderDocumentsToValidateV0452],
+            ['testS3StorageV0882', renderS3StorageStatusV0882]
         ];
         map.forEach(([id, handler]) => {
             const el = document.getElementById(id);
@@ -881,6 +930,9 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
         if (tab === 'documentLearning') {
             renderDocumentLearningV0452();
             renderDocumentsToValidateV0452();
+        }
+        if (tab === 'storageS3') {
+            renderS3StorageStatusV0882();
         }
     }
 

@@ -146,5 +146,6 @@ contextBridge.exposeInMainWorld('api', {
     updateAppUserV081: (data) => ipcRenderer.invoke('update-app-user-v081', data),
     disableAppUserV081: (userId) => ipcRenderer.invoke('disable-app-user-v081', userId),
     getUserPermissionsSummaryV081: (data) => ipcRenderer.invoke('get-user-permissions-summary-v081', data),
+    getS3StorageStatusV0882: () => ipcRenderer.invoke('get-s3-storage-status-v0882'),
     openDataFolder: () => ipcRenderer.invoke('open-data-folder')
 });
