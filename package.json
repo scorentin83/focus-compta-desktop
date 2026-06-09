@@ -11,14 +11,17 @@
     "pack": "electron-builder --dir"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "latest",
+    "@aws-sdk/s3-request-presigner": "latest",
     "better-sqlite3": "latest",
     "electron": "latest",
-    "pdf-parse": "latest",
-    "@aws-sdk/client-s3": "latest",
-    "@aws-sdk/s3-request-presigner": "latest"
+    "pdf-parse": "latest"
   },
   "devDependencies": {
-    "electron-builder": "latest"
+    "@electron/rebuild": "^4.0.4",
+    "electron": "39.0.0",
+    "electron-builder": "latest",
+    "electron-rebuild": "^3.2.9"
   },
   "build": {
     "appId": "fr.thefocuscompany.focuscompta",
