@@ -10,6 +10,7 @@ const {
     testS3Connection,
     uploadFileToS3,
     downloadFileFromS3,
+    deleteObjectFromS3,
     createGedObjectKey,
     moveObjectInS3
 } = require('./storage/s3Storage');
@@ -161,7 +162,9 @@ const {
     updateDocumentStorageMetadataV088,
     updateDocumentLocalFilepathV0893,
     getS3DocumentSyncOverviewV0883,
-    getS3DocumentSyncIssuesV0883
+    getS3DocumentSyncIssuesV0883,
+    getGedMaintenanceDocumentsV0894,
+    getGedTrashDocumentsV090
 } = require('./database');
 
 
@@ -890,6 +893,149 @@ async function alignDocumentLocalCacheV0893(documentId, reason = 'ged_update') {
         console.warn('Alignement cache local GED impossible pour le document', documentId, error.message);
         return { ok: false, reason, error: error.message, filepath: existingSource, target: desiredPath };
     }
+}
+
+
+// V0.89.4 / V0.90 - Maintenance GED et corbeille locale + S3
+function getExistingLocalPathV0894(doc = {}) {
+    const candidates = [doc.filepath, doc.local_cache_path, chooseDocumentCachePathV089(doc)]
+        .map(value => String(value || '').trim())
+        .filter(Boolean);
+
+    return candidates.find(candidate => {
+        try { return fs.existsSync(candidate); } catch (_) { return false; }
+    }) || '';
+}
+
+function buildGedTrashLocalPathV090(doc = {}) {
+    const dateValue = doc.deleted_at || doc.detected_date || doc.invoice_date || doc.added_at || '';
+    const period = getDocumentYearMonthForS3V088({ documentDate: dateValue });
+    const filename = safeFilename(doc.filename || path.basename(doc.filepath || '') || `document-${doc.id || Date.now()}.bin`);
+    return uniqueDestination(path.join(DATA_DIR, 'Trash', 'Documents', period.year, period.month), filename);
+}
+
+function buildGedTrashS3KeyV090(doc = {}) {
+    const currentKey = String(doc.s3_key || '').trim();
+    if (!currentKey) return '';
+    if (currentKey.includes('/trash/ged/')) return currentKey;
+    const replaced = currentKey.replace('/ged/', '/trash/ged/');
+    if (replaced !== currentKey) return replaced;
+    const company = doc.company_id || 'global';
+    const dateValue = doc.deleted_at || doc.detected_date || doc.invoice_date || doc.added_at || '';
+    const period = getDocumentYearMonthForS3V088({ documentDate: dateValue });
+    return ['focus-compta', 'companies', String(company || 'global'), 'trash', 'ged', period.year, period.month, path.basename(currentKey)].join('/');
+}
+
+async function moveDocumentLocalToTrashV090(doc = {}) {
+    const source = getExistingLocalPathV0894(doc);
+    if (!source) return { ok: true, skipped: true, message: 'Aucun fichier local à déplacer.' };
+    if (!isInsideDataRootV0893(source)) return { ok: true, skipped: true, filepath: source, message: 'Fichier externe non déplacé.' };
+    const target = buildGedTrashLocalPathV090(doc);
+    ensureDir(path.dirname(target));
+    fs.renameSync(source, target);
+    updateDocumentLocalFilepathV0893(doc.id, target);
+    return { ok: true, oldPath: source, newPath: target };
+}
+
+async function moveDocumentS3ToTrashV090(doc = {}) {
+    const config = getS3Config();
+    if (!config.isConfigured) return { ok: false, skipped: true, message: 'S3 non configuré.' };
+    if (!doc.s3_key) return { ok: true, skipped: true, message: 'Aucune clé S3 à déplacer.' };
+    const trashKey = buildGedTrashS3KeyV090(doc);
+    if (!trashKey || trashKey === doc.s3_key) return { ok: true, skipped: true, key: doc.s3_key };
+    const moved = await moveObjectInS3(doc.s3_key, trashKey);
+    updateDocumentStorageMetadataV088(doc.id, {
+        storageProvider: 'local+s3',
+        s3Bucket: moved.bucket || config.bucket,
+        s3Key: trashKey,
+        s3Etag: moved.etag || doc.s3_etag || '',
+        s3Region: config.region,
+        s3Endpoint: config.endpoint,
+        mimeType: doc.mime_type || mimeTypeFromFilepathV088(doc.filepath || ''),
+        fileSize: doc.file_size ?? null,
+        localCachePath: doc.local_cache_path || doc.filepath || '',
+        syncStatus: 'synced',
+        uploadedAt: doc.uploaded_at || null,
+        lastSyncAt: new Date().toISOString()
+    });
+    return { ok: true, oldKey: doc.s3_key, newKey: trashKey };
+}
+
+async function restoreDocumentS3FromTrashV090(documentId) {
+    const doc = getDocument(documentId);
+    if (!doc || !doc.s3_key || !String(doc.s3_key).includes('/trash/ged/')) return { ok: true, skipped: true };
+    const config = getS3Config();
+    if (!config.isConfigured) return { ok: false, skipped: true, message: 'S3 non configuré.' };
+    const newKey = createGedObjectKey(buildDocumentS3OptionsV088(doc));
+    if (newKey === doc.s3_key) return { ok: true, skipped: true, key: newKey };
+    const moved = await moveObjectInS3(doc.s3_key, newKey);
+    updateDocumentStorageMetadataV088(doc.id, {
+        storageProvider: 'local+s3',
+        s3Bucket: moved.bucket || config.bucket,
+        s3Key: newKey,
+        s3Etag: moved.etag || doc.s3_etag || '',
+        s3Region: config.region,
+        s3Endpoint: config.endpoint,
+        mimeType: doc.mime_type || mimeTypeFromFilepathV088(doc.filepath || ''),
+        fileSize: doc.file_size ?? null,
+        localCachePath: doc.local_cache_path || doc.filepath || '',
+        syncStatus: 'synced',
+        uploadedAt: doc.uploaded_at || null,
+        lastSyncAt: new Date().toISOString()
+    });
+    return { ok: true, oldKey: doc.s3_key, newKey };
+}
+
+function buildGedMaintenanceRowV0894(doc = {}) {
+    const expectedLocalPath = chooseDocumentCachePathV089(doc);
+    const existingLocalPath = getExistingLocalPathV0894(doc);
+    const localExists = Boolean(existingLocalPath);
+    const localAligned = Boolean(expectedLocalPath && existingLocalPath && path.resolve(existingLocalPath) === path.resolve(expectedLocalPath));
+    const s3Key = String(doc.s3_key || '').trim();
+    const s3Status = String(doc.sync_status || 'local_only');
+    const inTrash = Boolean(doc.deleted_at);
+    const issues = [];
+    if (!inTrash && !localExists) issues.push('local_missing');
+    if (!inTrash && localExists && !localAligned) issues.push('local_misaligned');
+    if (!inTrash && !s3Key) issues.push('s3_missing');
+    if (!inTrash && s3Status === 'sync_error') issues.push('s3_error');
+    if (inTrash && s3Key && !s3Key.includes('/trash/ged/')) issues.push('trash_s3_not_moved');
+    return {
+        id: doc.id,
+        company_id: doc.company_id,
+        company_name: doc.company_name || doc.company_id || 'global',
+        filename: doc.filename,
+        doc_type: doc.doc_type,
+        detected_date: doc.detected_date,
+        deleted_at: doc.deleted_at,
+        filepath: doc.filepath,
+        local_cache_path: doc.local_cache_path,
+        expected_local_path: expectedLocalPath,
+        existing_local_path: existingLocalPath,
+        s3_key: s3Key,
+        sync_status: s3Status,
+        localExists,
+        localAligned,
+        s3Ok: Boolean(s3Key && s3Status === 'synced'),
+        inTrash,
+        issues
+    };
+}
+
+async function repairGedDocumentV0894(documentId) {
+    const doc = getDocument(documentId);
+    if (!doc) return { ok: false, message: 'Document introuvable.' };
+    if (doc.deleted_at) return { ok: false, skipped: true, message: 'Document en corbeille : restauration nécessaire avant réparation.' };
+    let cache = null;
+    if (!getExistingLocalPathV0894(doc) && doc.s3_key) cache = await ensureDocumentLocalCacheV089(doc);
+    const localSync = await alignDocumentLocalCacheV0893(documentId, 'maintenance_repair');
+    const fresh = getDocument(documentId);
+    const localPath = getExistingLocalPathV0894(fresh || doc);
+    let s3Sync = null;
+    if (localPath) s3Sync = await syncDocumentToS3V088(documentId, localPath, buildDocumentS3OptionsV088(fresh || doc, { filepath: localPath }));
+    else if ((fresh || doc).s3_key) s3Sync = await relocateDocumentS3V088(documentId, 'maintenance_repair');
+    else s3Sync = { ok: false, message: 'Aucun fichier local ni clé S3 disponible.' };
+    return { ok: Boolean((localSync && localSync.ok) || (s3Sync && s3Sync.ok)), cache, localSync, s3Sync };
 }
 
 function uniqueDestination(dir, filename) {
@@ -2061,8 +2207,162 @@ function restoreLocalBackupV080(backupPath) {
     return { ok: true, restoredFrom: safePath, beforeRestore };
 }
 
+
+// ===========================
+// Focus Compta V0.91 - Sauvegarde de la base SQLite vers OVH S3
+// ===========================
+const S3_DB_BACKUP_META_PATH_V091 = path.join(DATA_DIR, '.s3-database-backup.json');
+
+function readS3DatabaseBackupMetaV091() {
+    try {
+        if (!fs.existsSync(S3_DB_BACKUP_META_PATH_V091)) return {};
+        return JSON.parse(fs.readFileSync(S3_DB_BACKUP_META_PATH_V091, 'utf8')) || {};
+    } catch (error) {
+        return {};
+    }
+}
+
+function writeS3DatabaseBackupMetaV091(meta = {}) {
+    try {
+        ensureDir(path.dirname(S3_DB_BACKUP_META_PATH_V091));
+        fs.writeFileSync(S3_DB_BACKUP_META_PATH_V091, JSON.stringify({
+            ...readS3DatabaseBackupMetaV091(),
+            ...meta,
+            updatedAt: new Date().toISOString()
+        }, null, 2));
+    } catch (error) {
+        console.warn('Impossible d’écrire le statut backup S3 DB :', error.message);
+    }
+}
+
+function cleanS3BackupSegmentV091(value, fallback = 'global') {
+    return String(value || fallback || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || fallback;
+}
+
+function databaseBackupS3KeyV091(mode = 'manual') {
+    const now = new Date();
+    const iso = now.toISOString().replace(/[:.]/g, '-');
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return [
+        'focus-compta',
+        'backups',
+        'database',
+        year,
+        month,
+        `${iso}_${cleanS3BackupSegmentV091(mode, 'manual')}_FocusCompta.db`
+    ].join('/');
+}
+
+function createTemporaryDatabaseSnapshotV091() {
+    if (!fs.existsSync(DB_PATH)) throw new Error('Base SQLite introuvable.');
+    const dir = path.join(BACKUPS_DIR, 'S3DatabaseSnapshots');
+    ensureDir(dir);
+    const filename = `${new Date().toISOString().replace(/[:.]/g, '-')}_FocusCompta.db`;
+    const snapshotPath = path.join(dir, filename);
+    fs.copyFileSync(DB_PATH, snapshotPath);
+    return snapshotPath;
+}
+
+async function createS3DatabaseBackupV091(options = {}) {
+    const mode = options.mode || 'manual';
+    const config = getS3Config();
+    const startedAt = new Date().toISOString();
+
+    if (!config.isConfigured) {
+        const status = { ok: false, status: 'not_configured', message: 'OVH S3 non configuré.', startedAt };
+        writeS3DatabaseBackupMetaV091({ lastBackup: status });
+        return status;
+    }
+
+    let snapshotPath = '';
+    try {
+        snapshotPath = createTemporaryDatabaseSnapshotV091();
+        const stats = fs.statSync(snapshotPath);
+        const key = databaseBackupS3KeyV091(mode);
+        const upload = await uploadFileToS3(snapshotPath, {
+            key,
+            filename: path.basename(snapshotPath),
+            type: 'backups',
+            contentType: 'application/x-sqlite3'
+        });
+        const result = {
+            ok: true,
+            status: 'synced',
+            mode,
+            bucket: upload.bucket || config.bucket,
+            key: upload.key || key,
+            size: upload.size || stats.size,
+            endpoint: config.endpoint,
+            region: config.region,
+            startedAt,
+            completedAt: new Date().toISOString()
+        };
+        writeS3DatabaseBackupMetaV091({ lastBackup: result, lastOkBackup: result });
+        try { addAuditLogV080({ actionType: 's3_database_backup_created', entityType: 'backup', label: path.basename(key), details: result }); } catch (_) {}
+        return result;
+    } catch (error) {
+        const result = {
+            ok: false,
+            status: 'error',
+            mode,
+            error: error.message,
+            startedAt,
+            completedAt: new Date().toISOString()
+        };
+        writeS3DatabaseBackupMetaV091({ lastBackup: result });
+        return result;
+    } finally {
+        // On conserve les snapshots locaux comme filet de sécurité, mais on limite le dossier.
+        try {
+            const dir = path.join(BACKUPS_DIR, 'S3DatabaseSnapshots');
+            const files = fs.existsSync(dir) ? fs.readdirSync(dir).map(name => ({ name, path: path.join(dir, name), mtime: fs.statSync(path.join(dir, name)).mtimeMs })).sort((a,b)=>b.mtime-a.mtime) : [];
+            files.slice(10).forEach(file => { try { fs.unlinkSync(file.path); } catch (_) {} });
+        } catch (_) {}
+    }
+}
+
+async function createS3DatabaseBackupIfDueV091() {
+    const meta = readS3DatabaseBackupMetaV091();
+    const lastOk = meta.lastOkBackup?.completedAt || '';
+    const lastTime = lastOk ? new Date(lastOk).getTime() : 0;
+    const twelveHours = 12 * 60 * 60 * 1000;
+    if (lastTime && Date.now() - lastTime < twelveHours) {
+        return { ok: true, skipped: true, message: 'Sauvegarde S3 récente déjà disponible.', lastOkBackup: meta.lastOkBackup };
+    }
+    return createS3DatabaseBackupV091({ mode: 'auto_start' });
+}
+
+function getS3DatabaseBackupStatusV091() {
+    const meta = readS3DatabaseBackupMetaV091();
+    const config = getS3Config();
+    let localDbSize = 0;
+    try { localDbSize = fs.existsSync(DB_PATH) ? fs.statSync(DB_PATH).size : 0; } catch (_) {}
+    return {
+        ok: true,
+        configured: config.isConfigured,
+        bucket: config.bucket,
+        endpoint: config.endpoint,
+        region: config.region,
+        dbPath: DB_PATH,
+        localDbSize,
+        lastBackup: meta.lastBackup || null,
+        lastOkBackup: meta.lastOkBackup || null,
+        updatedAt: meta.updatedAt || null
+    };
+}
+
 app.whenReady().then(() => {
     createWindow();
+    setTimeout(() => {
+        createS3DatabaseBackupIfDueV091().catch(error => console.warn('Backup automatique S3 DB impossible :', error.message));
+    }, 2500);
 });
 
 ipcMain.handle('add-company', async (event, name) => {
@@ -2834,8 +3134,36 @@ ipcMain.handle('get-documents', async (event, data) => {
 });
 
 ipcMain.handle('delete-document', async (event, documentId) => {
-    // V0.32 : suppression douce vers la corbeille, le fichier reste récupérable.
-    return deleteDocument(documentId);
+    const doc = getDocument(documentId);
+    if (!doc) return { ok: false, message: 'Document introuvable.' };
+    const ok = moveDocumentToTrash(documentId);
+    const result = { ok: Boolean(ok), localTrash: null, s3Trash: null };
+    if (ok) {
+        try { result.localTrash = await moveDocumentLocalToTrashV090(doc); }
+        catch (error) { result.localTrash = { ok: false, error: error.message }; }
+        try { result.s3Trash = await moveDocumentS3ToTrashV090(doc); }
+        catch (error) {
+            result.s3Trash = { ok: false, error: error.message };
+            try {
+                const fresh = getDocument(documentId) || doc;
+                updateDocumentStorageMetadataV088(documentId, {
+                    storageProvider: fresh.storage_provider || 'local+s3',
+                    s3Bucket: fresh.s3_bucket || '',
+                    s3Key: fresh.s3_key || doc.s3_key || '',
+                    s3Etag: fresh.s3_etag || '',
+                    s3Region: fresh.s3_region || '',
+                    s3Endpoint: fresh.s3_endpoint || '',
+                    mimeType: fresh.mime_type || '',
+                    fileSize: fresh.file_size ?? null,
+                    localCachePath: fresh.local_cache_path || fresh.filepath || '',
+                    syncStatus: 'sync_error',
+                    uploadedAt: fresh.uploaded_at || null,
+                    lastSyncAt: new Date().toISOString()
+                });
+            } catch (_) {}
+        }
+    }
+    return result;
 });
 
 ipcMain.handle('find-document-matches', async (event, data) => {
@@ -2972,14 +3300,30 @@ ipcMain.handle('get-document-history', async (event, documentId) => {
 
 
 ipcMain.handle('restore-document', async (event, documentId) => {
-    return restoreDocument(documentId);
+    const ok = restoreDocument(documentId);
+    const result = { ok: Boolean(ok), localSync: null, s3Sync: null };
+    if (ok) {
+        try { result.localSync = await alignDocumentLocalCacheV0893(documentId, 'restore_from_trash'); }
+        catch (error) { result.localSync = { ok: false, error: error.message }; }
+        try { result.s3Sync = await restoreDocumentS3FromTrashV090(documentId); }
+        catch (error) { result.s3Sync = { ok: false, error: error.message }; }
+    }
+    return result;
 });
 
 ipcMain.handle('delete-document-permanently', async (event, documentId) => {
     const doc = getDocument(documentId);
+    let s3Delete = null;
+    if (doc && doc.s3_key) {
+        try { s3Delete = await deleteObjectFromS3(doc.s3_key); }
+        catch (error) { s3Delete = { ok: false, error: error.message }; }
+    }
     const ok = deleteDocumentPermanently(documentId);
-    if (ok && doc) deleteFileIfInsideDataDir(doc.filepath);
-    return ok;
+    if (ok && doc) {
+        deleteFileIfInsideDataDir(doc.filepath);
+        if (doc.local_cache_path && doc.local_cache_path !== doc.filepath) deleteFileIfInsideDataDir(doc.local_cache_path);
+    }
+    return { ok: Boolean(ok), s3Delete };
 });
 
 ipcMain.handle('update-document-type', async (event, data) => {
@@ -3320,6 +3664,46 @@ ipcMain.handle('update-app-user-v081', async (event, data) => updateAppUserV081(
 ipcMain.handle('disable-app-user-v081', async (event, userId) => disableAppUserV081(userId));
 ipcMain.handle('get-user-permissions-summary-v081', async (event, data) => getUserPermissionsSummaryV081(data || {}));
 
+
+
+
+ipcMain.handle('get-ged-maintenance-v0894', async (event, data) => {
+    const rows = getGedMaintenanceDocumentsV0894(data?.companyId || null, true, data?.limit || 1000).map(buildGedMaintenanceRowV0894);
+    const counts = rows.reduce((acc, row) => {
+        acc.total += 1;
+        if (row.inTrash) acc.trash += 1;
+        if (row.issues.includes('local_missing')) acc.localMissing += 1;
+        if (row.issues.includes('local_misaligned')) acc.localMisaligned += 1;
+        if (row.issues.includes('s3_missing')) acc.s3Missing += 1;
+        if (row.issues.includes('s3_error')) acc.s3Error += 1;
+        if (row.issues.includes('trash_s3_not_moved')) acc.trashS3NotMoved += 1;
+        if (!row.issues.length && !row.inTrash) acc.ok += 1;
+        return acc;
+    }, { total: 0, ok: 0, trash: 0, localMissing: 0, localMisaligned: 0, s3Missing: 0, s3Error: 0, trashS3NotMoved: 0 });
+    const issues = rows.filter(row => row.issues.length).slice(0, Math.max(1, Math.min(Number(data?.issueLimit || 80), 300)));
+    const trash = getGedTrashDocumentsV090(data?.companyId || null, data?.trashLimit || 50);
+    return { ok: true, checkedAt: new Date().toISOString(), counts, issues, trash };
+});
+
+ipcMain.handle('repair-ged-document-v0894', async (event, data) => repairGedDocumentV0894(data?.documentId || data));
+
+ipcMain.handle('repair-ged-all-v0894', async (event, data) => {
+    const rows = getGedMaintenanceDocumentsV0894(data?.companyId || null, false, data?.limit || 100)
+        .map(buildGedMaintenanceRowV0894)
+        .filter(row => row.issues.some(issue => ['local_missing', 'local_misaligned', 's3_missing', 's3_error'].includes(issue)));
+    const results = [];
+    for (const row of rows.slice(0, Math.max(1, Math.min(Number(data?.limit || 100), 200)))) {
+        results.push({ documentId: row.id, result: await repairGedDocumentV0894(row.id) });
+    }
+    return { ok: true, count: results.length, results };
+});
+
+
+ipcMain.handle('get-s3-database-backup-status-v091', async () => getS3DatabaseBackupStatusV091());
+
+ipcMain.handle('create-s3-database-backup-v091', async (event, data = {}) => {
+    return createS3DatabaseBackupV091({ mode: data?.mode || 'manual' });
+});
 
 ipcMain.handle('open-data-folder', async () => {
     await shell.openPath(DATA_DIR);

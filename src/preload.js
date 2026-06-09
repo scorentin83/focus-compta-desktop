@@ -150,5 +150,10 @@ contextBridge.exposeInMainWorld('api', {
     getS3SyncDashboardV0883: (data) => ipcRenderer.invoke('get-s3-sync-dashboard-v0883', data),
     retryS3SyncDocumentV0883: (data) => ipcRenderer.invoke('retry-s3-sync-document-v0883', data),
     retryS3SyncErrorsV0883: (data) => ipcRenderer.invoke('retry-s3-sync-errors-v0883', data),
+    getGedMaintenanceV0894: (data) => ipcRenderer.invoke('get-ged-maintenance-v0894', data),
+    repairGedDocumentV0894: (data) => ipcRenderer.invoke('repair-ged-document-v0894', data),
+    repairGedAllV0894: (data) => ipcRenderer.invoke('repair-ged-all-v0894', data),
+    getS3DatabaseBackupStatusV091: () => ipcRenderer.invoke('get-s3-database-backup-status-v091'),
+    createS3DatabaseBackupV091: (data) => ipcRenderer.invoke('create-s3-database-backup-v091', data),
     openDataFolder: () => ipcRenderer.invoke('open-data-folder')
 });

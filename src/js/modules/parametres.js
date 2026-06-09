@@ -781,6 +781,188 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
         }
     }
 
+
+    function formatGedIssueV0894(issue) {
+        const labels = {
+            local_missing: 'Fichier local absent',
+            local_misaligned: 'Chemin local à réaligner',
+            s3_missing: 'Clé S3 absente',
+            s3_error: 'Erreur S3',
+            trash_s3_not_moved: 'S3 pas encore en corbeille'
+        };
+        return labels[issue] || issue;
+    }
+
+    async function renderGedMaintenanceV0894() {
+        const overview = document.getElementById('gedMaintenanceOverviewV0894');
+        const issuesBox = document.getElementById('gedMaintenanceIssuesV0894');
+        const trashBox = document.getElementById('gedTrashListV090');
+        if (!overview || !issuesBox || !window.api.getGedMaintenanceV0894) return;
+
+        overview.className = 's3-status-box-v0882 muted';
+        overview.innerHTML = '<p class="muted">Contrôle GED en cours…</p>';
+        issuesBox.innerHTML = '<p class="muted">Analyse…</p>';
+        if (trashBox) trashBox.innerHTML = '<p class="muted">Chargement de la corbeille…</p>';
+
+        try {
+            const data = await window.api.getGedMaintenanceV0894({ companyId: activeCompanyIdV043(), limit: 1000, issueLimit: 80, trashLimit: 50 });
+            const c = data.counts || {};
+            overview.className = `s3-status-box-v0882 ${(Number(c.localMissing || 0) + Number(c.localMisaligned || 0) + Number(c.s3Missing || 0) + Number(c.s3Error || 0)) ? 's3-error-v0882' : 's3-ok-v0882'}`;
+            overview.innerHTML = `
+                <div class="snapshot-grid-v043 s3-status-grid-v0882">
+                    <div><strong>${Number(c.total || 0)}</strong><span>Total GED</span></div>
+                    <div><strong>${Number(c.ok || 0)}</strong><span>Alignés</span></div>
+                    <div><strong>${Number(c.localMissing || 0)}</strong><span>Locaux absents</span></div>
+                    <div><strong>${Number(c.localMisaligned || 0)}</strong><span>Locaux à déplacer</span></div>
+                    <div><strong>${Number(c.s3Missing || 0)}</strong><span>S3 manquants</span></div>
+                    <div><strong>${Number(c.s3Error || 0)}</strong><span>S3 erreurs</span></div>
+                    <div><strong>${Number(c.trash || 0)}</strong><span>Corbeille</span></div>
+                </div>
+                <p class="muted">Dernier contrôle : ${formatS3CheckedAtV0882(data.checkedAt)}</p>
+            `;
+            const issues = data.issues || [];
+            if (!issues.length) {
+                issuesBox.innerHTML = '<p class="muted">Aucune anomalie détectée sur les documents actifs.</p>';
+            } else {
+                issuesBox.innerHTML = `
+                    <table class="settings-table-v043 s3-sync-table-v0883">
+                        <thead><tr><th>Document</th><th>Type</th><th>Date</th><th>Anomalies</th><th>Action</th></tr></thead>
+                        <tbody>
+                            ${issues.map(row => `
+                                <tr>
+                                    <td title="${escapeHtmlV043(row.expected_local_path || row.s3_key || '')}">${escapeHtmlV043(row.filename || '')}</td>
+                                    <td>${escapeHtmlV043(row.doc_type || '')}</td>
+                                    <td>${escapeHtmlV043(row.detected_date || '')}</td>
+                                    <td>${(row.issues || []).map(formatGedIssueV0894).map(escapeHtmlV043).join('<br>')}</td>
+                                    <td><button type="button" class="repair-ged-doc-v0894" data-document-id="${row.id}">Réparer</button></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>`;
+                issuesBox.querySelectorAll('.repair-ged-doc-v0894').forEach(button => {
+                    button.addEventListener('click', async () => {
+                        button.disabled = true;
+                        button.textContent = 'Réparation…';
+                        const result = await window.api.repairGedDocumentV0894({ documentId: Number(button.dataset.documentId) });
+                        if (!result || result.ok === false) alert(result?.message || result?.error || 'Réparation impossible.');
+                        await renderGedMaintenanceV0894();
+                        await renderS3SyncDashboardV0883();
+                    });
+                });
+            }
+            const trash = data.trash || [];
+            if (trashBox) {
+                if (!trash.length) trashBox.innerHTML = '<p class="muted">La corbeille GED est vide.</p>';
+                else trashBox.innerHTML = `
+                    <table class="settings-table-v043 s3-sync-table-v0883">
+                        <thead><tr><th>Document</th><th>Type</th><th>Date suppression</th><th>Chemin S3</th></tr></thead>
+                        <tbody>
+                            ${trash.map(row => `
+                                <tr>
+                                    <td>${escapeHtmlV043(row.filename || '')}</td>
+                                    <td>${escapeHtmlV043(row.doc_type || '')}</td>
+                                    <td>${formatS3CheckedAtV0882(row.deleted_at)}</td>
+                                    <td title="${escapeHtmlV043(row.s3_key || '')}">${escapeHtmlV043(row.s3_key ? 'S3 corbeille / archive' : 'Pas de clé S3')}</td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>`;
+            }
+        } catch (error) {
+            overview.className = 's3-status-box-v0882 s3-error-v0882';
+            overview.innerHTML = `<p><strong>⚠️ Maintenance impossible</strong></p><p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+            issuesBox.innerHTML = '<p class="muted">Aucune liste disponible.</p>';
+            if (trashBox) trashBox.innerHTML = '<p class="muted">Aucune corbeille disponible.</p>';
+        }
+    }
+
+    async function repairGedAllV0894() {
+        if (!window.api.repairGedAllV0894) return;
+        const button = document.getElementById('repairGedAllV0894');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Réparation…';
+        }
+        try {
+            const result = await window.api.repairGedAllV0894({ companyId: activeCompanyIdV043(), limit: 100 });
+            if (!result || result.ok === false) alert(result?.message || 'Réparation globale incomplète.');
+            await renderGedMaintenanceV0894();
+            await renderS3SyncDashboardV0883();
+        } catch (error) {
+            alert(error.message || String(error));
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Réparer les anomalies';
+            }
+        }
+    }
+
+
+    // V0.91 - Sauvegarde de la base SQLite vers OVH S3
+    function formatBytesV091(bytes) {
+        const n = Number(bytes || 0);
+        if (!n) return '0 o';
+        if (n < 1024) return `${n} o`;
+        if (n < 1024 * 1024) return `${Math.round(n / 1024)} Ko`;
+        return `${(n / 1024 / 1024).toFixed(1)} Mo`;
+    }
+
+    function renderBackupLineV091(label, backup) {
+        if (!backup) return `<div><strong>—</strong><span>${label}</span></div>`;
+        const ok = backup.ok === true ? 'OK' : (backup.status || 'Erreur');
+        const date = formatS3CheckedAtV0882(backup.completedAt || backup.startedAt || '');
+        return `<div><strong>${escapeHtmlV043(ok)}</strong><span>${label} · ${date}</span></div>`;
+    }
+
+    async function renderDatabaseBackupStatusV091() {
+        const box = document.getElementById('dbBackupStatusV091');
+        if (!box || !window.api.getS3DatabaseBackupStatusV091) return;
+        box.className = 's3-status-box-v0882 muted';
+        box.innerHTML = '<p class="muted">Lecture du statut de sauvegarde…</p>';
+        try {
+            const status = await window.api.getS3DatabaseBackupStatusV091();
+            const last = status.lastBackup || null;
+            const lastOk = status.lastOkBackup || null;
+            const isOk = Boolean(lastOk && lastOk.ok);
+            box.className = `s3-status-box-v0882 ${isOk ? 's3-ok-v0882' : 's3-error-v0882'}`;
+            box.innerHTML = `
+                <div class="snapshot-grid-v043 s3-status-grid-v0882">
+                    <div><strong>${status.configured ? 'Configuré' : 'À configurer'}</strong><span>OVH S3</span></div>
+                    <div><strong>${escapeHtmlV043(status.bucket || '—')}</strong><span>Bucket</span></div>
+                    <div><strong>${formatBytesV091(status.localDbSize)}</strong><span>Taille base locale</span></div>
+                    ${renderBackupLineV091('Dernière sauvegarde OK', lastOk)}
+                    ${renderBackupLineV091('Dernière tentative', last)}
+                </div>
+                ${last?.key ? `<p class="muted">Dernier chemin S3 : <code>${escapeHtmlV043(last.key)}</code></p>` : '<p class="muted">Aucune sauvegarde S3 enregistrée pour le moment.</p>'}
+                ${last && last.ok === false ? `<p class="muted">Erreur : ${escapeHtmlV043(last.error || last.message || 'Sauvegarde impossible')}</p>` : ''}
+            `;
+        } catch (error) {
+            box.className = 's3-status-box-v0882 s3-error-v0882';
+            box.innerHTML = `<p><strong>⚠️ Statut backup indisponible</strong></p><p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+        }
+    }
+
+    async function createDatabaseBackupV091() {
+        if (!window.api.createS3DatabaseBackupV091) return;
+        const button = document.getElementById('createDbBackupV091');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Sauvegarde…';
+        }
+        try {
+            const result = await window.api.createS3DatabaseBackupV091({ mode: 'manual' });
+            if (!result || result.ok === false) alert(result?.error || result?.message || 'Sauvegarde S3 impossible.');
+            await renderDatabaseBackupStatusV091();
+        } catch (error) {
+            alert(error.message || String(error));
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Sauvegarder maintenant';
+            }
+        }
+    }
+
     async function loadTypeOptionsV043() {
         const selects = [
             document.getElementById('canonicalThirdPartyTypeV043'),
@@ -989,7 +1171,11 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
             ['openDocumentsToValidateV0452', renderDocumentsToValidateV0452],
             ['testS3StorageV0882', renderS3StorageStatusV0882],
             ['refreshS3SyncV0883', renderS3SyncDashboardV0883],
-            ['retryS3SyncErrorsV0883', retryS3SyncErrorsV0883]
+            ['retryS3SyncErrorsV0883', retryS3SyncErrorsV0883],
+            ['refreshGedMaintenanceV0894', renderGedMaintenanceV0894],
+            ['repairGedAllV0894', repairGedAllV0894],
+            ['refreshDbBackupV091', renderDatabaseBackupStatusV091],
+            ['createDbBackupV091', createDatabaseBackupV091]
         ];
         map.forEach(([id, handler]) => {
             const el = document.getElementById(id);
@@ -1030,6 +1216,9 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
         }
         if (tab === 'storageS3') {
             renderS3StorageStatusV0882();
+            renderS3SyncDashboardV0883();
+            renderGedMaintenanceV0894();
+            renderDatabaseBackupStatusV091();
         }
     }
 

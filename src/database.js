@@ -5563,6 +5563,58 @@ function getS3DocumentSyncIssuesV0883(companyId = null, limit = 50) {
     `).all(...params);
 }
 
+
+// V0.89.4 - Maintenance GED locale + OVH S3
+function getGedMaintenanceDocumentsV0894(companyId = null, includeTrash = true, limit = 1000) {
+    const where = [];
+    const params = [];
+
+    if (!includeTrash) where.push('d.deleted_at IS NULL');
+    if (companyId) {
+        where.push('d.company_id = ?');
+        params.push(companyId);
+    }
+
+    params.push(Math.max(1, Math.min(Number(limit || 1000), 5000)));
+
+    return db.prepare(`
+        SELECT
+            d.*,
+            c.name AS company_name
+        FROM documents d
+        LEFT JOIN companies c ON c.id = d.company_id
+        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        ORDER BY
+            CASE WHEN d.deleted_at IS NULL THEN 0 ELSE 1 END,
+            COALESCE(d.detected_date, d.added_at) DESC,
+            d.id DESC
+        LIMIT ?
+    `).all(...params);
+}
+
+function getGedTrashDocumentsV090(companyId = null, limit = 200) {
+    const where = ['d.deleted_at IS NOT NULL'];
+    const params = [];
+
+    if (companyId) {
+        where.push('d.company_id = ?');
+        params.push(companyId);
+    }
+
+    params.push(Math.max(1, Math.min(Number(limit || 200), 1000)));
+
+    return db.prepare(`
+        SELECT
+            d.*,
+            c.name AS company_name
+        FROM documents d
+        LEFT JOIN companies c ON c.id = d.company_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY COALESCE(d.deleted_at, d.added_at) DESC, d.id DESC
+        LIMIT ?
+    `).all(...params);
+}
+
 module.exports = {
     db,
     DATA_DIR,
@@ -5609,6 +5661,8 @@ module.exports = {
     updateDocumentLocalFilepathV0893,
     getS3DocumentSyncOverviewV0883,
     getS3DocumentSyncIssuesV0883,
+    getGedMaintenanceDocumentsV0894,
+    getGedTrashDocumentsV090,
     createDocumentForReceipt,
     getDocuments,
     getDocument,

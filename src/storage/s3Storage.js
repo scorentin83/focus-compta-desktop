@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { pipeline } = require('stream/promises');
 const {
   S3Client,
   HeadBucketCommand,
@@ -283,6 +284,48 @@ async function uploadFileToS3(localFilePath, options = {}) {
   };
 }
 
+
+async function downloadFileFromS3(key, destinationPath) {
+  const config = getS3Config();
+  const client = createS3Client();
+
+  if (!key) {
+    throw new Error('Clé S3 manquante.');
+  }
+  if (!destinationPath) {
+    throw new Error('Chemin local de destination manquant.');
+  }
+
+  const destinationDir = path.dirname(destinationPath);
+  if (!fs.existsSync(destinationDir)) fs.mkdirSync(destinationDir, { recursive: true });
+
+  const tempPath = `${destinationPath}.download-${Date.now()}.tmp`;
+
+  try {
+    const result = await client.send(new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key
+    }));
+
+    await pipeline(result.Body, fs.createWriteStream(tempPath));
+    fs.renameSync(tempPath, destinationPath);
+
+    const stats = fs.statSync(destinationPath);
+    return {
+      ok: true,
+      bucket: config.bucket,
+      key,
+      filepath: destinationPath,
+      size: stats.size,
+      contentType: result.ContentType || '',
+      etag: result.ETag || ''
+    };
+  } catch (error) {
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+    throw error;
+  }
+}
+
 async function getSignedDownloadUrl(key, expiresInSeconds = 300) {
   const config = getS3Config();
   const client = createS3Client();
@@ -364,6 +407,7 @@ module.exports = {
   createObjectKey,
   createGedObjectKey,
   uploadFileToS3,
+  downloadFileFromS3,
   getSignedDownloadUrl,
   deleteObjectFromS3,
   moveObjectInS3

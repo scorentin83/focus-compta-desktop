@@ -2257,3 +2257,56 @@ if (typeof showDocumentContextMenuV037 === 'function' && !window.__focusTrashCon
         });
     };
 }
+
+
+// ===========================
+// Focus Compta V0.90.2 - Polish GED / statuts S3 visibles
+// ===========================
+function documentS3StatusBadgeV0902(doc = {}) {
+    const status = String(doc.sync_status || (doc.s3_key ? 'synced' : 'local_only')).toLowerCase();
+    if (status === 'synced' && doc.s3_key) return '<span class="doc-s3-badge-v0902 ok" title="Document synchronisé avec OVH S3">☁️ OK</span>';
+    if (status === 'sync_error') return '<span class="doc-s3-badge-v0902 error" title="Erreur de synchronisation OVH S3">☁️ Erreur</span>';
+    if (!doc.s3_key) return '<span class="doc-s3-badge-v0902 pending" title="Document non encore envoyé vers OVH S3">☁️ Local</span>';
+    return '<span class="doc-s3-badge-v0902 pending" title="Synchronisation OVH S3 à vérifier">☁️ À vérifier</span>';
+}
+
+if (typeof renderDocumentTableV033 === 'function' && !window.__focusDocumentS3ColumnV0902) {
+    window.__focusDocumentS3ColumnV0902 = true;
+    const renderDocumentTableBeforeV0902 = renderDocumentTableV033;
+    renderDocumentTableV033 = function(container, docs) {
+        const result = renderDocumentTableBeforeV0902(container, docs);
+        try {
+            const table = container?.querySelector?.('table.documents-table-v033');
+            if (!table || table.dataset.s3ColumnV0902) return result;
+            table.dataset.s3ColumnV0902 = '1';
+            const headerRow = table.querySelector('thead tr');
+            if (headerRow) {
+                const th = document.createElement('th');
+                th.textContent = 'S3';
+                headerRow.appendChild(th);
+            }
+            const docsById = new Map((docs || []).map(doc => [String(doc.id), doc]));
+            table.querySelectorAll('tbody tr[data-document-id]').forEach(row => {
+                const doc = docsById.get(String(row.dataset.documentId)) || {};
+                const td = document.createElement('td');
+                td.innerHTML = documentS3StatusBadgeV0902(doc);
+                row.appendChild(td);
+            });
+        } catch (error) {
+            console.warn('Colonne statut S3 GED impossible à afficher', error);
+        }
+        return result;
+    };
+}
+
+if (!window.__focusS3BadgeStyleV0902) {
+    window.__focusS3BadgeStyleV0902 = true;
+    const style = document.createElement('style');
+    style.textContent = `
+        .doc-s3-badge-v0902{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;background:#eef2ff;color:#3730a3;border:1px solid rgba(55,48,163,.18)}
+        .doc-s3-badge-v0902.ok{background:#ecfdf3;color:#166534;border-color:rgba(22,101,52,.20)}
+        .doc-s3-badge-v0902.error{background:#fef2f2;color:#991b1b;border-color:rgba(153,27,27,.20)}
+        .doc-s3-badge-v0902.pending{background:#fff7ed;color:#9a3412;border-color:rgba(154,52,18,.20)}
+    `;
+    document.head.appendChild(style);
+}
