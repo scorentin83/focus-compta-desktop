@@ -552,31 +552,6 @@ ensureColumn('cash_sheets', 'bank_remise_check', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'bank_remise_deferred_check', 'REAL DEFAULT 0');
 ensureColumn('documents', 'detected_date', 'TEXT');
 
-// V0.88 — Préparation stockage OVH S3.
-// Ces colonnes permettent de stocker une copie cloud des fichiers
-// sans casser le fonctionnement local actuel.
-[
-    'documents',
-    'receipts',
-    'statements',
-    'bank_accounts',
-    'cash_sheets',
-    'accounting_export_lots'
-].forEach(tableName => {
-    ensureColumn(tableName, 'storage_provider', "TEXT DEFAULT 'local'");
-    ensureColumn(tableName, 's3_bucket', 'TEXT');
-    ensureColumn(tableName, 's3_key', 'TEXT');
-    ensureColumn(tableName, 's3_etag', 'TEXT');
-    ensureColumn(tableName, 's3_region', 'TEXT');
-    ensureColumn(tableName, 's3_endpoint', 'TEXT');
-    ensureColumn(tableName, 'mime_type', 'TEXT');
-    ensureColumn(tableName, 'file_size', 'INTEGER');
-    ensureColumn(tableName, 'local_cache_path', 'TEXT');
-    ensureColumn(tableName, 'sync_status', "TEXT DEFAULT 'local_only'");
-    ensureColumn(tableName, 'uploaded_at', 'TEXT');
-    ensureColumn(tableName, 'last_sync_at', 'TEXT');
-});
-
 
 const transactionsMissingSearchText = db.prepare(`
     SELECT id, label, category, notes, pdf_source, amount
@@ -5415,6 +5390,51 @@ function getThirdPartyTransactionsV083(data = {}) {
     return { thirdParty: third, transactions: rows, totals };
 }
 
+
+function updateDocumentStorageMetadataV088(documentId, metadata = {}) {
+    const id = Number(documentId);
+    if (!id) {
+        return { updated: false, message: 'Identifiant document invalide.' };
+    }
+
+    const result = db.prepare(`
+        UPDATE documents
+        SET storage_provider = ?,
+            s3_bucket = ?,
+            s3_key = ?,
+            s3_etag = ?,
+            s3_region = ?,
+            s3_endpoint = ?,
+            mime_type = ?,
+            file_size = ?,
+            local_cache_path = ?,
+            sync_status = ?,
+            uploaded_at = ?,
+            last_sync_at = ?
+        WHERE id = ?
+    `).run(
+        metadata.storageProvider || metadata.storage_provider || 'local',
+        metadata.s3Bucket || metadata.s3_bucket || '',
+        metadata.s3Key || metadata.s3_key || '',
+        metadata.s3Etag || metadata.s3_etag || '',
+        metadata.s3Region || metadata.s3_region || '',
+        metadata.s3Endpoint || metadata.s3_endpoint || '',
+        metadata.mimeType || metadata.mime_type || '',
+        metadata.fileSize ?? metadata.file_size ?? null,
+        metadata.localCachePath || metadata.local_cache_path || '',
+        metadata.syncStatus || metadata.sync_status || 'local_only',
+        metadata.uploadedAt || metadata.uploaded_at || null,
+        metadata.lastSyncAt || metadata.last_sync_at || null,
+        id
+    );
+
+    return {
+        updated: result.changes > 0,
+        changes: result.changes
+    };
+}
+
+
 module.exports = {
     db,
     DATA_DIR,
@@ -5457,6 +5477,7 @@ module.exports = {
     updateTransactionsBulk,
 
     createDocument,
+    updateDocumentStorageMetadataV088,
     createDocumentForReceipt,
     getDocuments,
     getDocument,

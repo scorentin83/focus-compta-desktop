@@ -6,6 +6,12 @@ const pdfParseModule = require('pdf-parse');
 const PDFParse = pdfParseModule.PDFParse;
 
 const {
+    getS3Config,
+    uploadFileToS3
+} = require('./storage/s3Storage');
+
+
+const {
     DATA_DIR,
     STATEMENTS_DIR,
     RECEIPTS_DIR,
@@ -146,7 +152,8 @@ const {
     setPeriodLockV083,
     isAccountingPeriodLockedV083,
     getExpertDossierV083,
-    getThirdPartyTransactionsV083
+    getThirdPartyTransactionsV083,
+    updateDocumentStorageMetadataV088
 } = require('./database');
 
 
@@ -527,6 +534,90 @@ function safeFilename(filename) {
 
     return `${base}${ext.toLowerCase()}`;
 }
+
+
+function mimeTypeFromFilepathV088(filepath = '') {
+    const ext = path.extname(String(filepath || '')).toLowerCase();
+
+    if (ext === '.pdf') return 'application/pdf';
+    if (ext === '.png') return 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+    if (ext === '.webp') return 'image/webp';
+    if (ext === '.gif') return 'image/gif';
+    if (ext === '.txt') return 'text/plain';
+    if (ext === '.csv') return 'text/csv';
+    if (ext === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (ext === '.xls') return 'application/vnd.ms-excel';
+
+    return 'application/octet-stream';
+}
+
+async function syncDocumentToS3V088(documentId, localFilepath, options = {}) {
+    if (!documentId || !localFilepath || !fs.existsSync(localFilepath)) {
+        return { ok: false, skipped: true, message: 'Document local introuvable ou identifiant manquant.' };
+    }
+
+    const config = getS3Config();
+
+    if (!config.isConfigured) {
+        try {
+            updateDocumentStorageMetadataV088(documentId, {
+                storageProvider: 'local',
+                syncStatus: 'local_only',
+                localCachePath: localFilepath,
+                mimeType: mimeTypeFromFilepathV088(localFilepath),
+                fileSize: fs.statSync(localFilepath).size
+            });
+        } catch (_) {}
+
+        return { ok: false, skipped: true, message: 'S3 non configuré, document conservé en local.' };
+    }
+
+    try {
+        const stats = fs.statSync(localFilepath);
+        const filename = options.filename || path.basename(localFilepath);
+
+        const upload = await uploadFileToS3(localFilepath, {
+            companyId: options.companyId || 'global',
+            type: options.type || 'documents',
+            filename,
+            contentType: mimeTypeFromFilepathV088(localFilepath)
+        });
+
+        updateDocumentStorageMetadataV088(documentId, {
+            storageProvider: 'local+s3',
+            s3Bucket: upload.bucket,
+            s3Key: upload.key,
+            s3Etag: upload.etag || '',
+            s3Region: config.region,
+            s3Endpoint: config.endpoint,
+            mimeType: mimeTypeFromFilepathV088(localFilepath),
+            fileSize: upload.size || stats.size,
+            localCachePath: localFilepath,
+            syncStatus: 'synced',
+            uploadedAt: new Date().toISOString(),
+            lastSyncAt: new Date().toISOString()
+        });
+
+        return { ok: true, upload };
+    } catch (error) {
+        console.warn('Synchronisation OVH S3 impossible pour le document', documentId, error.message);
+
+        try {
+            updateDocumentStorageMetadataV088(documentId, {
+                storageProvider: 'local+s3',
+                syncStatus: 'sync_error',
+                localCachePath: localFilepath,
+                mimeType: mimeTypeFromFilepathV088(localFilepath),
+                fileSize: fs.existsSync(localFilepath) ? fs.statSync(localFilepath).size : null,
+                lastSyncAt: new Date().toISOString()
+            });
+        } catch (_) {}
+
+        return { ok: false, error: error.message };
+    }
+}
+
 
 function uniqueDestination(dir, filename) {
     ensureDir(dir);
@@ -2371,7 +2462,19 @@ ipcMain.handle('add-documents', async (event, data) => {
             } catch (renameError) {
                 console.warn('Renommage intelligent V0.59 impossible', renameError);
             }
-            added.push({ id: result.lastInsertRowid, filename: finalDoc.filename, filepath: finalDoc.filepath, analysis });
+            const s3Sync = await syncDocumentToS3V088(result.lastInsertRowid, finalDoc.filepath, {
+                companyId: data.companyId || 'global',
+                type: data.docType || 'documents',
+                filename: finalDoc.filename
+            });
+
+            added.push({
+                id: result.lastInsertRowid,
+                filename: finalDoc.filename,
+                filepath: finalDoc.filepath,
+                analysis,
+                s3Sync
+            });
         }
     }
 
