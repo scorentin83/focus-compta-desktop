@@ -1,23 +1,38 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const { app } = require('electron');
 
-const PROJECT_ROOT = path.join(__dirname, '..');
-const DATA_DIR = path.join(PROJECT_ROOT, 'FocusComptaData');
+// En version installée, l'application est empaquetée dans app.asar.
+// On ne doit donc jamais écrire dans __dirname / resources / app.asar.
+// Toutes les données utilisateur sont stockées dans AppData via app.getPath('userData').
+const APP_DATA_ROOT = app.getPath('userData');
+
+const DATA_DIR = path.join(APP_DATA_ROOT, 'FocusComptaData');
 const STATEMENTS_DIR = path.join(DATA_DIR, 'Releves');
 const RECEIPTS_DIR = path.join(DATA_DIR, 'Justificatifs');
 const RIB_DIR = path.join(DATA_DIR, 'RIB');
-const BACKUPS_DIR = path.join(PROJECT_ROOT, 'FocusComptaBackups');
+const BACKUPS_DIR = path.join(APP_DATA_ROOT, 'FocusComptaBackups');
 const ACCOUNTING_EXPORTS_DIR = path.join(DATA_DIR, 'ExportsComptables');
-const LEGACY_DB_PATH = path.join(PROJECT_ROOT, 'ThetaCompta.db');
+
+// Chemins hérités utilisés par les anciennes versions en mode projet/dev.
+// Ils servent uniquement à migrer une ancienne base si aucune base AppData n'existe encore.
+const LEGACY_PROJECT_ROOT = path.join(__dirname, '..');
+const LEGACY_DB_PATH = path.join(LEGACY_PROJECT_ROOT, 'ThetaCompta.db');
+const LEGACY_DATA_DB_PATH = path.join(LEGACY_PROJECT_ROOT, 'FocusComptaData', 'FocusCompta.db');
+
 const DB_PATH = path.join(DATA_DIR, 'FocusCompta.db');
 
 [DATA_DIR, STATEMENTS_DIR, RECEIPTS_DIR, RIB_DIR, BACKUPS_DIR, ACCOUNTING_EXPORTS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-if (!fs.existsSync(DB_PATH) && fs.existsSync(LEGACY_DB_PATH)) {
-    fs.copyFileSync(LEGACY_DB_PATH, DB_PATH);
+if (!fs.existsSync(DB_PATH)) {
+    if (fs.existsSync(LEGACY_DATA_DB_PATH)) {
+        fs.copyFileSync(LEGACY_DATA_DB_PATH, DB_PATH);
+    } else if (fs.existsSync(LEGACY_DB_PATH)) {
+        fs.copyFileSync(LEGACY_DB_PATH, DB_PATH);
+    }
 }
 
 const db = new Database(DB_PATH);
