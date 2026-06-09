@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
-    "electron": "^42.3.3",
+    "electron": "^33.4.11",
     "electron-builder": "^26.15.2"
   },
   "build": {
