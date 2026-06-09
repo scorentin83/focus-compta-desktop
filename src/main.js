@@ -156,7 +156,9 @@ const {
     isAccountingPeriodLockedV083,
     getExpertDossierV083,
     getThirdPartyTransactionsV083,
-    updateDocumentStorageMetadataV088
+    updateDocumentStorageMetadataV088,
+    getS3DocumentSyncOverviewV0883,
+    getS3DocumentSyncIssuesV0883
 } = require('./database');
 
 
@@ -2932,6 +2934,66 @@ ipcMain.handle('get-s3-storage-status-v0882', async () => {
         isConfigured: Boolean(config.isConfigured),
         hasAccessKey: Boolean(config.accessKeyId),
         hasSecretKey: Boolean(config.secretAccessKey)
+    };
+});
+
+
+
+// V0.88.3 - Tableau de suivi de synchronisation S3
+ipcMain.handle('get-s3-sync-dashboard-v0883', async (event, data = {}) => {
+    const companyId = data && data.companyId ? data.companyId : null;
+    return {
+        counts: getS3DocumentSyncOverviewV0883(companyId),
+        issues: getS3DocumentSyncIssuesV0883(companyId, data.limit || 50),
+        checkedAt: new Date().toISOString()
+    };
+});
+
+ipcMain.handle('retry-s3-sync-document-v0883', async (event, data = {}) => {
+    const documentId = data && (data.documentId || data.id);
+    const doc = documentId ? getDocument(documentId) : null;
+
+    if (!doc) return { ok: false, message: 'Document introuvable.' };
+
+    const filepath = doc.filepath || doc.local_cache_path || '';
+    if (!filepath || !fs.existsSync(filepath)) {
+        try {
+            updateDocumentStorageMetadataV088(documentId, {
+                storageProvider: doc.storage_provider || 'local+s3',
+                s3Bucket: doc.s3_bucket || '',
+                s3Key: doc.s3_key || '',
+                s3Etag: doc.s3_etag || '',
+                s3Region: doc.s3_region || '',
+                s3Endpoint: doc.s3_endpoint || '',
+                syncStatus: 'sync_error',
+                localCachePath: filepath,
+                mimeType: doc.mime_type || '',
+                fileSize: doc.file_size ?? null,
+                uploadedAt: doc.uploaded_at || null,
+                lastSyncAt: new Date().toISOString()
+            });
+        } catch (_) {}
+        return { ok: false, message: 'Fichier local introuvable. Impossible de relancer la synchronisation.' };
+    }
+
+    return syncDocumentToS3V088(documentId, filepath, buildDocumentS3OptionsV088(doc));
+});
+
+ipcMain.handle('retry-s3-sync-errors-v0883', async (event, data = {}) => {
+    const companyId = data && data.companyId ? data.companyId : null;
+    const issues = getS3DocumentSyncIssuesV0883(companyId, data.limit || 50);
+    const results = [];
+
+    for (const row of issues) {
+        if (String(row.sync_status || 'local_only') === 'synced' && row.s3_key) continue;
+        const result = await syncDocumentToS3V088(row.id, row.filepath || row.local_cache_path || '', buildDocumentS3OptionsV088(row));
+        results.push({ id: row.id, filename: row.filename, ...result });
+    }
+
+    return {
+        ok: results.every(result => result.ok || result.skipped),
+        count: results.length,
+        results
     };
 });
 

@@ -5435,6 +5435,88 @@ function updateDocumentStorageMetadataV088(documentId, metadata = {}) {
 }
 
 
+
+// V0.88.3 - Suivi de synchronisation OVH S3 pour la GED
+function getS3DocumentSyncOverviewV0883(companyId = null) {
+    const where = ['deleted_at IS NULL'];
+    const params = [];
+
+    if (companyId) {
+        where.push('company_id = ?');
+        params.push(companyId);
+    }
+
+    const sqlWhere = `WHERE ${where.join(' AND ')}`;
+    const rows = db.prepare(`
+        SELECT
+            COALESCE(sync_status, 'local_only') AS sync_status,
+            COUNT(*) AS count
+        FROM documents
+        ${sqlWhere}
+        GROUP BY COALESCE(sync_status, 'local_only')
+    `).all(...params);
+
+    const counts = {
+        total: 0,
+        synced: 0,
+        local_only: 0,
+        sync_error: 0,
+        other: 0
+    };
+
+    rows.forEach(row => {
+        const key = row.sync_status || 'local_only';
+        const count = Number(row.count || 0);
+        counts.total += count;
+        if (Object.prototype.hasOwnProperty.call(counts, key)) counts[key] += count;
+        else counts.other += count;
+    });
+
+    return counts;
+}
+
+function getS3DocumentSyncIssuesV0883(companyId = null, limit = 50) {
+    const where = [
+        'd.deleted_at IS NULL',
+        `(COALESCE(d.sync_status, 'local_only') IN ('local_only', 'sync_error') OR COALESCE(d.s3_key, '') = '')`
+    ];
+    const params = [];
+
+    if (companyId) {
+        where.push('d.company_id = ?');
+        params.push(companyId);
+    }
+
+    params.push(Math.max(1, Math.min(Number(limit || 50), 200)));
+
+    return db.prepare(`
+        SELECT
+            d.id,
+            d.company_id,
+            c.name AS company_name,
+            d.filename,
+            d.filepath,
+            d.doc_type,
+            d.detected_date,
+            d.folder_path,
+            d.storage_provider,
+            d.s3_bucket,
+            d.s3_key,
+            d.sync_status,
+            d.last_sync_at,
+            d.uploaded_at,
+            d.file_size,
+            d.mime_type
+        FROM documents d
+        LEFT JOIN companies c ON c.id = d.company_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY
+            CASE COALESCE(d.sync_status, 'local_only') WHEN 'sync_error' THEN 0 WHEN 'local_only' THEN 1 ELSE 2 END,
+            COALESCE(d.last_sync_at, d.added_at) DESC
+        LIMIT ?
+    `).all(...params);
+}
+
 module.exports = {
     db,
     DATA_DIR,
@@ -5478,6 +5560,8 @@ module.exports = {
 
     createDocument,
     updateDocumentStorageMetadataV088,
+    getS3DocumentSyncOverviewV0883,
+    getS3DocumentSyncIssuesV0883,
     createDocumentForReceipt,
     getDocuments,
     getDocument,

@@ -686,6 +686,101 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
         }
     }
 
+
+    function formatS3SyncStatusLabelV0883(status) {
+        const value = String(status || 'local_only');
+        if (value === 'synced') return '✅ Synchronisé';
+        if (value === 'sync_error') return '⚠️ Erreur';
+        if (value === 'local_only') return '⏳ Local seul';
+        return value;
+    }
+
+    async function renderS3SyncDashboardV0883() {
+        const overview = document.getElementById('s3SyncOverviewV0883');
+        const issuesBox = document.getElementById('s3SyncIssuesV0883');
+        if (!overview || !issuesBox || !window.api.getS3SyncDashboardV0883) return;
+
+        overview.className = 's3-status-box-v0882 muted';
+        overview.innerHTML = '<p class="muted">Chargement du suivi de synchronisation…</p>';
+        issuesBox.innerHTML = '<p class="muted">Chargement…</p>';
+
+        try {
+            const data = await window.api.getS3SyncDashboardV0883({ companyId: activeCompanyIdV043(), limit: 50 });
+            const counts = data.counts || {};
+            const issues = data.issues || [];
+
+            overview.className = 's3-status-box-v0882 s3-ok-v0882';
+            overview.innerHTML = `
+                <div class="snapshot-grid-v043 s3-status-grid-v0882">
+                    <div><strong>${Number(counts.total || 0)}</strong><span>Total GED</span></div>
+                    <div><strong>${Number(counts.synced || 0)}</strong><span>Synchronisés</span></div>
+                    <div><strong>${Number(counts.local_only || 0)}</strong><span>En attente</span></div>
+                    <div><strong>${Number(counts.sync_error || 0)}</strong><span>En erreur</span></div>
+                </div>
+                <p class="muted">Dernier contrôle : ${formatS3CheckedAtV0882(data.checkedAt)}</p>
+            `;
+
+            if (!issues.length) {
+                issuesBox.innerHTML = '<p class="muted">Tous les documents visibles sont synchronisés ou aucune anomalie n’est détectée.</p>';
+                return;
+            }
+
+            issuesBox.innerHTML = `
+                <table class="settings-table-v043 s3-sync-table-v0883">
+                    <thead><tr><th>Document</th><th>Société</th><th>Type</th><th>Date</th><th>Statut</th><th>Dernière synchro</th><th>Action</th></tr></thead>
+                    <tbody>
+                        ${issues.map(row => `
+                            <tr>
+                                <td title="${escapeHtmlV043(row.s3_key || '')}">${escapeHtmlV043(row.filename || '')}</td>
+                                <td>${escapeHtmlV043(row.company_name || row.company_id || 'global')}</td>
+                                <td>${escapeHtmlV043(row.doc_type || '')}</td>
+                                <td>${escapeHtmlV043(row.detected_date || '')}</td>
+                                <td>${formatS3SyncStatusLabelV0883(row.sync_status)}</td>
+                                <td>${formatS3CheckedAtV0882(row.last_sync_at)}</td>
+                                <td><button type="button" class="retry-s3-doc-v0883" data-document-id="${row.id}">Relancer</button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            issuesBox.querySelectorAll('.retry-s3-doc-v0883').forEach(button => {
+                button.addEventListener('click', async () => {
+                    button.disabled = true;
+                    button.textContent = 'Relance…';
+                    const result = await window.api.retryS3SyncDocumentV0883({ documentId: Number(button.dataset.documentId) });
+                    if (!result || !result.ok) alert(result?.message || result?.error || 'Synchronisation impossible.');
+                    await renderS3SyncDashboardV0883();
+                });
+            });
+        } catch (error) {
+            overview.className = 's3-status-box-v0882 s3-error-v0882';
+            overview.innerHTML = `<p><strong>⚠️ Suivi impossible</strong></p><p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+            issuesBox.innerHTML = '<p class="muted">Aucune liste disponible.</p>';
+        }
+    }
+
+    async function retryS3SyncErrorsV0883() {
+        if (!window.api.retryS3SyncErrorsV0883) return;
+        const button = document.getElementById('retryS3SyncErrorsV0883');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Relance…';
+        }
+        try {
+            const result = await window.api.retryS3SyncErrorsV0883({ companyId: activeCompanyIdV043(), limit: 50 });
+            if (!result || result.ok === false) alert('Certaines synchronisations n’ont pas pu être relancées.');
+            await renderS3SyncDashboardV0883();
+        } catch (error) {
+            alert(error.message || String(error));
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Relancer les erreurs';
+            }
+        }
+    }
+
     async function loadTypeOptionsV043() {
         const selects = [
             document.getElementById('canonicalThirdPartyTypeV043'),
@@ -892,7 +987,9 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
             ['maintenanceFullV043', () => runMaintenanceV043('full')],
             ['refreshDocumentLearningV0452', renderDocumentLearningV0452],
             ['openDocumentsToValidateV0452', renderDocumentsToValidateV0452],
-            ['testS3StorageV0882', renderS3StorageStatusV0882]
+            ['testS3StorageV0882', renderS3StorageStatusV0882],
+            ['refreshS3SyncV0883', renderS3SyncDashboardV0883],
+            ['retryS3SyncErrorsV0883', retryS3SyncErrorsV0883]
         ];
         map.forEach(([id, handler]) => {
             const el = document.getElementById(id);

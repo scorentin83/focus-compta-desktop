@@ -7000,3 +7000,26 @@ body:not([data-focus-active-page="homePage"]) #companyContextBar {
     font-size: 0.92rem;
 }
 .s3-details-v0882 summary { cursor: pointer; font-weight: 700; }
+
+
+/* V0.88.3 - Suivi de synchronisation OVH S3 */
+.s3-sync-panel-v0883 {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.s3-actions-v0883 {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.s3-sync-table-v0883 td:first-child {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.retry-s3-doc-v0883 {
+    padding: 6px 10px;
+    border-radius: 10px;
+}
