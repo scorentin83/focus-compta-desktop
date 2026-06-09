@@ -1,25 +1,29 @@
 {
   "name": "focus-compta",
-  "version": "0.92.0",
+  "version": "0.93.0",
   "description": "Focus Compta — cockpit financier de pré-comptabilité pour PME et magasins d'optique.",
   "main": "src/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win",
-    "dist:win": "electron-builder --win",
+    "dist": "electron-builder --win nsis",
+    "dist:win": "electron-builder --win nsis",
     "test:s3": "node scripts/test-s3.js",
-    "check:syntax": "node --check src/database.js && node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check scripts/test-s3.js && node --check src/storage/s3Storage.js"
+    "check:syntax": "node --check src/database.js && node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check scripts/test-s3.js && node --check src/storage/s3Storage.js",
+    "pack": "electron-builder --dir",
+    "dist:portable": "electron-builder --win portable",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.953.0",
     "@aws-sdk/s3-request-presigner": "^3.953.0",
     "better-sqlite3": "latest",
     "dotenv": "^17.2.3",
-    "electron": "latest",
     "pdf-parse": "latest"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "electron": "^42.3.3",
     "electron-builder": "^26.15.2"
   },
   "build": {
@@ -29,10 +33,15 @@
       "output": "dist"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
     },
     "files": [
-      "**/*",
+      "package.json",
+      "src/**/*",
+      "scripts/**/*",
       "!FocusComptaData/**",
       "!FocusComptaBackups/**",
       "!node_modules/.cache/**",
@@ -40,7 +49,22 @@
       "!build/**",
       "!out/**",
       "!.git/**",
-      "!.env"
-    ]
+      "!.env",
+      "!.env.*",
+      "!*.zip",
+      "!README*.md"
+    ],
+    "asar": true,
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "publish": null,
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Focus Compta",
+      "deleteAppDataOnUninstall": false
+    }
   }
 }
