@@ -1,25 +1,26 @@
 {
   "name": "focus-compta",
-  "version": "0.86.1",
-  "description": "Focus Compta Desktop",
-  "main": "src/main.js",
-  "author": "Corentin Sauvage",
-  "license": "Private",
+  "version": "0.87.0",
+  "description": "Focus Compta — cockpit financier de pré-comptabilité pour PME et magasins d'optique.",
+  "main": "main.js",
+  "private": true,
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win",
-    "dist:win": "electron-builder --win"
-  },
-  "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^26.15.2",
-    "electron-rebuild": "^3.2.9"
+    "dist:win": "electron-builder --win",
+    "test:s3": "node scripts/test-s3.js",
+    "check:syntax": "node --check database.js && node --check main.js && node --check preload.js && node --check renderer.js && node --check scripts/test-s3.js && node --check src/storage/s3Storage.js"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "pdf-parse": "^2.4.5"
+    "@aws-sdk/client-s3": "^3.953.0",
+    "@aws-sdk/s3-request-presigner": "^3.953.0",
+    "better-sqlite3": "latest",
+    "dotenv": "^17.2.3",
+    "electron": "latest",
+    "pdf-parse": "latest"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.15.2"
   },
   "build": {
     "appId": "fr.thefocuscompany.focuscompta",
@@ -38,7 +39,8 @@
       "!dist/**",
       "!build/**",
       "!out/**",
-      "!.git/**"
+      "!.git/**",
+      "!.env"
     ]
   }
 }
