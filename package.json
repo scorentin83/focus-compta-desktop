@@ -6,10 +6,12 @@
   "author": "Corentin Sauvage",
   "license": "Private",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win"
   },
   "devDependencies": {
     "electron": "^31.0.0",
+    "electron-builder": "^26.15.2",
     "electron-rebuild": "^3.2.9"
   },
   "dependencies": {
@@ -17,5 +19,25 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "pdf-parse": "^2.4.5"
+  },
+  "build": {
+    "appId": "fr.thefocuscompany.focuscompta",
+    "productName": "Focus Compta",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "files": [
+      "**/*",
+      "!FocusComptaData/**",
+      "!FocusComptaBackups/**",
+      "!node_modules/.cache/**",
+      "!dist/**",
+      "!build/**",
+      "!out/**",
+      "!.git/**"
+    ]
   }
 }
