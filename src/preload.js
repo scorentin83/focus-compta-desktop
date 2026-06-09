@@ -155,5 +155,9 @@ contextBridge.exposeInMainWorld('api', {
     repairGedAllV0894: (data) => ipcRenderer.invoke('repair-ged-all-v0894', data),
     getS3DatabaseBackupStatusV091: () => ipcRenderer.invoke('get-s3-database-backup-status-v091'),
     createS3DatabaseBackupV091: (data) => ipcRenderer.invoke('create-s3-database-backup-v091', data),
+    listS3DatabaseBackupsV0911: () => ipcRenderer.invoke('list-s3-database-backups-v0911'),
+    restoreS3DatabaseBackupV0911: (data) => ipcRenderer.invoke('restore-s3-database-backup-v0911', data),
+    getS3AppConfigV092: () => ipcRenderer.invoke('get-s3-app-config-v092'),
+    saveS3AppConfigV092: (data) => ipcRenderer.invoke('save-s3-app-config-v092', data),
     openDataFolder: () => ipcRenderer.invoke('open-data-folder')
 });

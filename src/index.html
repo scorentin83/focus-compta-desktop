@@ -810,6 +810,27 @@
                                 <button id="testS3StorageV0882" type="button">Tester la connexion</button>
                             </div>
                             <p class="muted">Contrôle de la connexion OVH S3 utilisée comme miroir cloud de la GED locale.</p>
+                            <div class="s3-sync-panel-v0883 s3-config-panel-v092">
+                                <div class="section-title-row compact-title-row">
+                                    <div>
+                                        <span class="eyebrow">Configuration locale</span>
+                                        <h3>Paramètres OVH S3</h3>
+                                    </div>
+                                    <div class="s3-actions-v0883">
+                                        <button id="loadS3ConfigV092" type="button">Charger</button>
+                                        <button id="saveS3ConfigV092" type="button">Sauvegarder</button>
+                                    </div>
+                                </div>
+                                <p class="muted">À terme, l’app n’aura plus besoin du fichier .env. Les réglages seront conservés dans le dossier de données local Windows.</p>
+                                <div class="s3-config-grid-v092">
+                                    <label>Endpoint<input id="s3EndpointV092" placeholder="https://s3.eu-west-par.io.cloud.ovh.net"></label>
+                                    <label>Région<input id="s3RegionV092" placeholder="eu-west-par"></label>
+                                    <label>Bucket<input id="s3BucketV092" placeholder="focus-compta-documents"></label>
+                                    <label>Access key<input id="s3AccessKeyV092" autocomplete="off"></label>
+                                    <label>Secret key<input id="s3SecretKeyV092" type="password" autocomplete="off" placeholder="laisser vide pour conserver"></label>
+                                </div>
+                                <div id="s3ConfigStatusV092" class="s3-status-box-v0882 muted">Clique sur “Charger” pour afficher la configuration courante.</div>
+                            </div>
                             <div id="s3StatusV0882" class="s3-status-box-v0882 muted">Clique sur “Tester la connexion” pour vérifier OVH S3.</div>
                             <div class="s3-sync-panel-v0883">
                                 <div class="section-title-row compact-title-row">
@@ -857,6 +878,17 @@
                                 </div>
                                 <p class="muted">Les PDF sont dans OVH S3, mais la base contient la GED, les rapprochements, les statuts, les tiers et les réglages. Cette sauvegarde sécurise le cœur de l’application.</p>
                                 <div id="dbBackupStatusV091" class="s3-status-box-v0882 muted">Clique sur “Actualiser” pour vérifier la dernière sauvegarde de la base.</div>
+                                <div class="section-title-row compact-title-row" style="margin-top:14px;">
+                                    <div>
+                                        <span class="eyebrow">Restauration</span>
+                                        <h4>Restaurer une sauvegarde S3</h4>
+                                    </div>
+                                    <div class="s3-actions-v0883">
+                                        <button id="listDbBackupsV0911" type="button">Lister les sauvegardes</button>
+                                    </div>
+                                </div>
+                                <p class="muted">Avant restauration, Focus Compta crée une sauvegarde locale de sécurité. Il faudra fermer puis relancer l’application après restauration.</p>
+                                <div id="dbBackupListV0911" class="settings-table-wrap-v043 muted">Aucune sauvegarde chargée.</div>
                             </div>
                         </div>
                     </div>

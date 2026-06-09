@@ -963,6 +963,117 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
         }
     }
 
+
+
+    // V0.91.1 - Restauration base SQLite depuis OVH S3
+    async function listDatabaseBackupsV0911() {
+        const box = document.getElementById('dbBackupListV0911');
+        if (!box || !window.api.listS3DatabaseBackupsV0911) return;
+        box.innerHTML = '<p class="muted">Chargement des sauvegardes S3…</p>';
+        try {
+            const result = await window.api.listS3DatabaseBackupsV0911();
+            if (!result || result.ok === false) {
+                box.innerHTML = `<p class="muted">${escapeHtmlV043(result?.message || result?.error || 'Liste indisponible.')}</p>`;
+                return;
+            }
+            const backups = result.backups || [];
+            if (!backups.length) {
+                box.innerHTML = '<p class="muted">Aucune sauvegarde de base trouvée dans OVH S3.</p>';
+                return;
+            }
+            box.innerHTML = `
+                <table class="settings-table-v043 s3-sync-table-v0883">
+                    <thead><tr><th>Date</th><th>Fichier</th><th>Taille</th><th>Action</th></tr></thead>
+                    <tbody>
+                        ${backups.map(row => `
+                            <tr>
+                                <td>${formatS3CheckedAtV0882(row.lastModified)}</td>
+                                <td title="${escapeHtmlV043(row.key)}">${escapeHtmlV043(row.filename)}</td>
+                                <td>${formatBytesV091(row.size)}</td>
+                                <td><button type="button" class="restore-db-backup-v0911" data-key="${escapeHtmlV043(row.key)}">Restaurer</button></td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>`;
+            box.querySelectorAll('.restore-db-backup-v0911').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const key = button.dataset.key || '';
+                    const ok = confirm('Restaurer cette base depuis OVH S3 ? Une sauvegarde locale de sécurité sera créée. Il faudra ensuite relancer Focus Compta.');
+                    if (!ok) return;
+                    button.disabled = true;
+                    button.textContent = 'Restauration…';
+                    const restored = await window.api.restoreS3DatabaseBackupV0911({ key });
+                    if (!restored || restored.ok === false) {
+                        alert(restored?.message || restored?.error || 'Restauration impossible.');
+                    } else {
+                        alert(`${restored.message || 'Base restaurée.'}
+
+Sauvegarde locale de sécurité : ${restored.safetyBackupDir || ''}`);
+                    }
+                    button.disabled = false;
+                    button.textContent = 'Restaurer';
+                    await renderDatabaseBackupStatusV091();
+                });
+            });
+        } catch (error) {
+            box.innerHTML = `<p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+        }
+    }
+
+    // V0.92 - Configuration OVH S3 dans l'application
+    function fillS3ConfigFormV092(config = {}) {
+        const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
+        set('s3EndpointV092', config.endpoint || '');
+        set('s3RegionV092', config.region || '');
+        set('s3BucketV092', config.bucket || '');
+        set('s3AccessKeyV092', config.accessKeyId || '');
+        set('s3SecretKeyV092', '');
+    }
+
+    async function loadS3ConfigV092() {
+        const box = document.getElementById('s3ConfigStatusV092');
+        if (!window.api.getS3AppConfigV092) return;
+        try {
+            const config = await window.api.getS3AppConfigV092();
+            fillS3ConfigFormV092(config);
+            if (box) {
+                box.className = `s3-status-box-v0882 ${config.isConfigured ? 's3-ok-v0882' : 's3-error-v0882'}`;
+                box.innerHTML = `
+                    <div class="snapshot-grid-v043 s3-status-grid-v0882">
+                        <div><strong>${config.isConfigured ? 'Configuré' : 'Incomplet'}</strong><span>Statut</span></div>
+                        <div><strong>${escapeHtmlV043(config.source || '—')}</strong><span>Source</span></div>
+                        <div><strong>${config.hasSecretKey ? 'Présente' : 'Absente'}</strong><span>Secret key</span></div>
+                    </div>
+                    <p class="muted">Fichier config : <code>${escapeHtmlV043(config.configPath || '')}</code></p>`;
+            }
+        } catch (error) {
+            if (box) box.innerHTML = `<p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+        }
+    }
+
+    async function saveS3ConfigV092() {
+        const box = document.getElementById('s3ConfigStatusV092');
+        if (!window.api.saveS3AppConfigV092) return;
+        const get = id => (document.getElementById(id)?.value || '').trim();
+        const data = {
+            endpoint: get('s3EndpointV092'),
+            region: get('s3RegionV092'),
+            bucket: get('s3BucketV092'),
+            accessKeyId: get('s3AccessKeyV092'),
+            secretAccessKey: get('s3SecretKeyV092')
+        };
+        try {
+            const saved = await window.api.saveS3AppConfigV092(data);
+            if (box) {
+                box.className = `s3-status-box-v0882 ${saved?.config?.isConfigured ? 's3-ok-v0882' : 's3-error-v0882'}`;
+                box.innerHTML = `<p><strong>${escapeHtmlV043(saved?.message || 'Configuration sauvegardée.')}</strong></p>`;
+            }
+            await loadS3ConfigV092();
+            await renderS3StorageStatusV0882();
+        } catch (error) {
+            if (box) box.innerHTML = `<p class="muted">${escapeHtmlV043(error.message || String(error))}</p>`;
+        }
+    }
+
     async function loadTypeOptionsV043() {
         const selects = [
             document.getElementById('canonicalThirdPartyTypeV043'),
@@ -1175,7 +1286,10 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
             ['refreshGedMaintenanceV0894', renderGedMaintenanceV0894],
             ['repairGedAllV0894', repairGedAllV0894],
             ['refreshDbBackupV091', renderDatabaseBackupStatusV091],
-            ['createDbBackupV091', createDatabaseBackupV091]
+            ['createDbBackupV091', createDatabaseBackupV091],
+            ['listDbBackupsV0911', listDatabaseBackupsV0911],
+            ['loadS3ConfigV092', loadS3ConfigV092],
+            ['saveS3ConfigV092', saveS3ConfigV092]
         ];
         map.forEach(([id, handler]) => {
             const el = document.getElementById(id);
@@ -1219,6 +1333,7 @@ if (typeof window !== 'undefined' && typeof window.showTextInputModal !== 'funct
             renderS3SyncDashboardV0883();
             renderGedMaintenanceV0894();
             renderDatabaseBackupStatusV091();
+        loadS3ConfigV092();
         }
     }
 

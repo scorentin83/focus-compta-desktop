@@ -8,18 +8,56 @@ const {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
-  CopyObjectCommand
+  CopyObjectCommand,
+  ListObjectsV2Command
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 require('dotenv').config();
 
+function getDefaultS3ConfigPath() {
+  try {
+    const electron = require('electron');
+    if (electron && electron.app && typeof electron.app.getPath === 'function') {
+      return path.join(electron.app.getPath('userData'), 'FocusComptaData', 'Settings', 's3-config.json');
+    }
+  } catch (_) {}
+  return process.env.FOCUS_COMPTA_S3_CONFIG_FILE || path.join(process.cwd(), 'FocusComptaData', 'Settings', 's3-config.json');
+}
+
+function readStoredS3Config() {
+  const configPath = getDefaultS3ConfigPath();
+  try {
+    if (!fs.existsSync(configPath)) return {};
+    return JSON.parse(fs.readFileSync(configPath, 'utf8')) || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveS3Config(config = {}) {
+  const configPath = getDefaultS3ConfigPath();
+  const previous = readStoredS3Config();
+  const next = {
+    endpoint: String(config.endpoint ?? previous.endpoint ?? '').trim(),
+    region: String(config.region ?? previous.region ?? '').trim(),
+    bucket: String(config.bucket ?? previous.bucket ?? '').trim(),
+    accessKeyId: String(config.accessKeyId ?? previous.accessKeyId ?? '').trim(),
+    secretAccessKey: String(config.secretAccessKey ?? previous.secretAccessKey ?? '').trim(),
+    updatedAt: new Date().toISOString()
+  };
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(next, null, 2));
+  return getS3Config();
+}
+
 function getS3Config() {
-  const endpoint = process.env.OVH_S3_ENDPOINT || '';
-  const region = process.env.OVH_S3_REGION || '';
-  const bucket = process.env.OVH_S3_BUCKET || '';
-  const accessKeyId = process.env.OVH_S3_ACCESS_KEY_ID || '';
-  const secretAccessKey = process.env.OVH_S3_SECRET_ACCESS_KEY || '';
+  const stored = readStoredS3Config();
+  const endpoint = stored.endpoint || process.env.OVH_S3_ENDPOINT || '';
+  const region = stored.region || process.env.OVH_S3_REGION || '';
+  const bucket = stored.bucket || process.env.OVH_S3_BUCKET || '';
+  const accessKeyId = stored.accessKeyId || process.env.OVH_S3_ACCESS_KEY_ID || '';
+  const secretAccessKey = stored.secretAccessKey || process.env.OVH_S3_SECRET_ACCESS_KEY || '';
 
   return {
     endpoint,
@@ -27,7 +65,23 @@ function getS3Config() {
     bucket,
     accessKeyId,
     secretAccessKey,
+    source: stored.endpoint || stored.bucket || stored.accessKeyId || stored.secretAccessKey ? 'app_config' : 'env',
+    configPath: getDefaultS3ConfigPath(),
     isConfigured: Boolean(endpoint && region && bucket && accessKeyId && secretAccessKey)
+  };
+}
+
+function getS3ConfigForDisplay() {
+  const config = getS3Config();
+  return {
+    endpoint: config.endpoint,
+    region: config.region,
+    bucket: config.bucket,
+    accessKeyId: config.accessKeyId,
+    hasSecretKey: Boolean(config.secretAccessKey),
+    source: config.source,
+    configPath: config.configPath,
+    isConfigured: config.isConfigured
   };
 }
 
@@ -401,8 +455,34 @@ async function moveObjectInS3(oldKey, newKey) {
   };
 }
 
+async function listDatabaseBackupsFromS3(options = {}) {
+  const config = getS3Config();
+  const client = createS3Client();
+  const prefix = options.prefix || 'focus-compta/backups/database/';
+  const maxKeys = Math.max(1, Math.min(Number(options.maxKeys || 50), 200));
+  const result = await client.send(new ListObjectsV2Command({
+    Bucket: config.bucket,
+    Prefix: prefix,
+    MaxKeys: maxKeys
+  }));
+  const rows = (result.Contents || [])
+    .filter(item => item && item.Key && !String(item.Key).endsWith('/'))
+    .map(item => ({
+      key: item.Key,
+      bucket: config.bucket,
+      size: item.Size || 0,
+      lastModified: item.LastModified ? item.LastModified.toISOString() : '',
+      filename: path.basename(item.Key)
+    }))
+    .sort((a, b) => String(b.lastModified).localeCompare(String(a.lastModified)));
+  return { ok: true, bucket: config.bucket, prefix, backups: rows };
+}
+
 module.exports = {
   getS3Config,
+  getS3ConfigForDisplay,
+  saveS3Config,
+  listDatabaseBackupsFromS3,
   testS3Connection,
   createObjectKey,
   createGedObjectKey,

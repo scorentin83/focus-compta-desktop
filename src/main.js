@@ -7,6 +7,9 @@ const PDFParse = pdfParseModule.PDFParse;
 
 const {
     getS3Config,
+    getS3ConfigForDisplay,
+    saveS3Config,
+    listDatabaseBackupsFromS3,
     testS3Connection,
     uploadFileToS3,
     downloadFileFromS3,
@@ -2358,6 +2361,68 @@ function getS3DatabaseBackupStatusV091() {
     };
 }
 
+
+async function listS3DatabaseBackupsV0911() {
+    const config = getS3Config();
+    if (!config.isConfigured) {
+        return { ok: false, message: 'OVH S3 non configuré.', backups: [] };
+    }
+    try {
+        return await listDatabaseBackupsFromS3({ maxKeys: 100 });
+    } catch (error) {
+        return { ok: false, message: 'Liste des sauvegardes S3 impossible.', error: error.message, backups: [] };
+    }
+}
+
+async function restoreS3DatabaseBackupV0911(data = {}) {
+    const key = String(data?.key || '').trim();
+    if (!key || !key.startsWith('focus-compta/backups/database/')) {
+        return { ok: false, message: 'Sauvegarde S3 invalide.' };
+    }
+    const safetyBackupDir = createLocalBackup();
+    const restoreDir = path.join(BACKUPS_DIR, 'RestoreFromS3');
+    ensureDir(restoreDir);
+    const downloadPath = path.join(restoreDir, `${new Date().toISOString().replace(/[:.]/g, '-')}_${path.basename(key)}`);
+    try {
+        await downloadFileFromS3(key, downloadPath);
+        const beforeRestoreCopy = `${DB_PATH}.before-s3-restore-${Date.now()}`;
+        try { if (fs.existsSync(DB_PATH)) fs.copyFileSync(DB_PATH, beforeRestoreCopy); } catch (_) {}
+        fs.copyFileSync(downloadPath, DB_PATH);
+        const result = {
+            ok: true,
+            key,
+            restoredFrom: downloadPath,
+            safetyBackupDir,
+            dbPath: DB_PATH,
+            message: 'Base restaurée. Ferme puis relance Focus Compta pour recharger toutes les données.'
+        };
+        writeS3DatabaseBackupMetaV091({ lastRestore: { ...result, completedAt: new Date().toISOString() } });
+        try { addAuditLogV080({ actionType: 's3_database_backup_restored', entityType: 'backup', label: path.basename(key), details: result }); } catch (_) {}
+        return result;
+    } catch (error) {
+        return { ok: false, key, safetyBackupDir, error: error.message, message: 'Restauration S3 impossible. La sauvegarde locale de sécurité a été conservée.' };
+    }
+}
+
+function getS3AppConfigV092() {
+    return getS3ConfigForDisplay();
+}
+
+async function saveS3AppConfigV092(data = {}) {
+    const saved = saveS3Config({
+        endpoint: data?.endpoint,
+        region: data?.region,
+        bucket: data?.bucket,
+        accessKeyId: data?.accessKeyId,
+        secretAccessKey: data?.secretAccessKey
+    });
+    return {
+        ok: true,
+        config: getS3ConfigForDisplay(),
+        message: saved.isConfigured ? 'Configuration OVH S3 sauvegardée.' : 'Configuration sauvegardée mais incomplète.'
+    };
+}
+
 app.whenReady().then(() => {
     createWindow();
     setTimeout(() => {
@@ -3704,6 +3769,14 @@ ipcMain.handle('get-s3-database-backup-status-v091', async () => getS3DatabaseBa
 ipcMain.handle('create-s3-database-backup-v091', async (event, data = {}) => {
     return createS3DatabaseBackupV091({ mode: data?.mode || 'manual' });
 });
+
+ipcMain.handle('list-s3-database-backups-v0911', async () => listS3DatabaseBackupsV0911());
+
+ipcMain.handle('restore-s3-database-backup-v0911', async (event, data = {}) => restoreS3DatabaseBackupV0911(data));
+
+ipcMain.handle('get-s3-app-config-v092', async () => getS3AppConfigV092());
+
+ipcMain.handle('save-s3-app-config-v092', async (event, data = {}) => saveS3AppConfigV092(data));
 
 ipcMain.handle('open-data-folder', async () => {
     await shell.openPath(DATA_DIR);
