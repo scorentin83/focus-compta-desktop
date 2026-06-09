@@ -552,6 +552,31 @@ ensureColumn('cash_sheets', 'bank_remise_check', 'REAL DEFAULT 0');
 ensureColumn('cash_sheets', 'bank_remise_deferred_check', 'REAL DEFAULT 0');
 ensureColumn('documents', 'detected_date', 'TEXT');
 
+// V0.88 — Préparation stockage OVH S3.
+// Ces colonnes permettent de stocker une copie cloud des fichiers
+// sans casser le fonctionnement local actuel.
+[
+    'documents',
+    'receipts',
+    'statements',
+    'bank_accounts',
+    'cash_sheets',
+    'accounting_export_lots'
+].forEach(tableName => {
+    ensureColumn(tableName, 'storage_provider', "TEXT DEFAULT 'local'");
+    ensureColumn(tableName, 's3_bucket', 'TEXT');
+    ensureColumn(tableName, 's3_key', 'TEXT');
+    ensureColumn(tableName, 's3_etag', 'TEXT');
+    ensureColumn(tableName, 's3_region', 'TEXT');
+    ensureColumn(tableName, 's3_endpoint', 'TEXT');
+    ensureColumn(tableName, 'mime_type', 'TEXT');
+    ensureColumn(tableName, 'file_size', 'INTEGER');
+    ensureColumn(tableName, 'local_cache_path', 'TEXT');
+    ensureColumn(tableName, 'sync_status', "TEXT DEFAULT 'local_only'");
+    ensureColumn(tableName, 'uploaded_at', 'TEXT');
+    ensureColumn(tableName, 'last_sync_at', 'TEXT');
+});
+
 
 const transactionsMissingSearchText = db.prepare(`
     SELECT id, label, category, notes, pdf_source, amount
