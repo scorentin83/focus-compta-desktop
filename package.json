@@ -1,0 +1,49 @@
+{
+  "name": "focus-compta",
+  "version": "0.85.0",
+  "description": "Focus Compta — cockpit financier de pré-comptabilité pour PME et magasins d'optique.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check:syntax": "node --check database.js && node --check main.js && node --check preload.js && node --check renderer.js && find js/modules -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "dist": "electron-builder --win",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {
+    "better-sqlite3": "latest",
+    "electron": "latest",
+    "pdf-parse": "latest",
+    "@aws-sdk/client-s3": "latest",
+    "@aws-sdk/s3-request-presigner": "latest"
+  },
+  "devDependencies": {
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "fr.thefocuscompany.focuscompta",
+    "productName": "Focus Compta",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!FocusComptaData/**",
+      "!FocusComptaBackups/**",
+      "!dist/**",
+      "!node_modules/.cache/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

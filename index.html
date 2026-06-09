@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+<meta charset="UTF-8">
+<title>Focus Compta</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="app-shell">
+    <aside class="main-sidebar">
+        <div class="brand-block brand-logo-only-v0841">
+            <img src="assets/focus-logo.png" alt="Focus Compta" class="brand-logo">
+        </div>
+
+        <nav class="main-nav v050-nav">
+            <button class="nav-button active" data-page="homePage">🏠 Accueil</button>
+            <button class="nav-button" data-page="companiesPage">🏢 Sociétés</button>
+            <button class="nav-button" data-page="bankPage">🏦 Banque</button>
+            <button class="nav-button" data-page="matchingPage">🔗 Rapprochements</button>
+            <button class="nav-button" data-page="receiptsPage">📁 Documents</button>
+            <button class="nav-button" data-page="thirdPartiesPage">👤 Tiers</button>
+            <button class="nav-button" data-page="accountingPage">📚 Comptabilité</button>
+            <button class="nav-button" data-page="settingsPage">⚙ Paramètres</button>
+        </nav>
+
+        <div class="sidebar-footer" aria-label="Profil utilisateur"></div>
+    </aside>
+
+    <main class="main-content">
+
+        <div id="companyContextBar" class="company-context-bar no-company" role="status" aria-live="polite">
+            <button id="contextCompanyButton" class="context-company-main" type="button" title="Choisir une société">
+                <span class="context-label">Société ouverte</span>
+                <strong id="contextCompanyName">Aucune société ouverte</strong>
+            </button>
+            <div class="context-pill">
+                <span>Exercice</span>
+                <strong id="contextFiscalYear">—</strong>
+            </div>
+            <div class="context-pill">
+                <span>Banque</span>
+                <strong id="contextBankName">—</strong>
+            </div>
+            <div class="context-pill">
+                <span>Trésorerie</span>
+                <strong id="contextTreasury">—</strong>
+            </div>
+        </div>
+
+        <section id="homePage" class="page-section active-page v084-home-page">
+            <div class="home-welcome-v084">
+                <h1 id="homeGreetingV084">Ravi de vous revoir.</h1>
+                <p>Choisissez une structure pour commencer.</p>
+            </div>
+
+            <div id="homeCompanyCardsV084" class="home-company-grid-v084">
+                <article class="home-company-card-v084 skeleton-v084"><span>Chargement des structures…</span></article>
+            </div>
+
+            <section class="panel clean-panel notes-panel-v0831 notes-panel-v084">
+                <div class="section-title-row compact-title-row">
+                    <div>
+                        <h2>Post-its</h2>
+                    </div>
+                    <button id="addStickyNoteV0831" type="button" class="primary-button">Ajouter une note</button>
+                </div>
+                <div id="stickyNotesV0831" class="sticky-notes-grid-v0831"></div>
+            </section>
+
+            <div class="legacy-home-v050" aria-hidden="true">
+                <strong id="v050GlobalActionCount">—</strong><strong id="v050TreasuryTotal">0 €</strong><strong id="v071BankTotal">0 €</strong><strong id="v071ThirdPartyTotal">0 €</strong><strong id="v071AcomptesTotal">0 €</strong><strong id="v071VatTotal">0 €</strong><strong id="v071DocsValidate">0</strong><strong id="v071DocsTransmit">0</strong><strong id="v071BankMissing">0</strong><strong id="v071StatementGaps">0</strong><div id="v050TreasuryList"></div><div id="v050AlertsList"></div><div id="v050AccountingTimeline"></div><span id="v0831TimelineMonthTitle"></span><span id="v050TimelineSummary"></span><button id="v0831TimelinePrev" type="button"></button><button id="v0831TimelineNext" type="button"></button><strong id="homeExpenses">0 €</strong><strong id="homeIncome">0 €</strong><strong id="homeMissing">0</strong><small id="homeMissingAmount">0 €</small><strong id="homeTransactions">0</strong><strong id="homeStatements">0</strong><strong id="homeAlerts">0</strong><span id="homeHealthSummary"></span><strong id="healthStatementGaps">0</strong><strong id="healthMissingReceipts">0</strong><small id="healthMissingReceiptsAmount">0 €</small><strong id="healthUnmatchedDocuments">0</strong><strong id="healthMissingCashSheets">0</strong><small id="healthMissingCashPeriod"></small><strong id="healthDuplicates">0</strong><ul id="recentActivity"></ul><ul id="homeCategoryBreakdown"></ul>
+            </div>
+        </section>
+
+        <section id="companiesPage" class="page-section">
+            <div class="topbar">
+                <div>
+                    <h1>Sociétés</h1>
+                    <p>Créez et sélectionnez les sociétés suivies dans Focus Compta.</p>
+                </div>
+            </div>
+
+            <div class="panel clean-panel company-management-panel legacy-company-add-panel-v0842" aria-hidden="true">
+                <h2>Ajouter une société</h2>
+                <div class="form-row horizontal-form">
+                    <input id="companyName" type="text" placeholder="Nom de la société">
+                    <button id="newCompany">Ajouter</button>
+                </div>
+            </div>
+
+            <div id="companyList" class="company-card-grid"></div>
+
+            <div class="panel clean-panel company-dossier-panel-v050" id="v050CompanyDossier">
+                <div class="section-title-row compact-title-row">
+                    <div>
+                        <span class="eyebrow">Fiche société</span>
+                        <h2 id="v050CompanyDossierTitle">Sélectionnez une société</h2>
+                    </div>
+                    <span class="status-pill">Synthèse · Documents · Banques · Caisse · Comptabilité</span>
+                </div>
+                <div class="v050-tabs" role="tablist">
+                    <button class="v050-tab active" data-v050-company-tab="summary" type="button">Synthèse</button>
+                    <button class="v050-tab" data-v050-company-tab="documents" type="button">Documents</button>
+                    <button class="v050-tab" data-v050-company-tab="banks" type="button">Banques</button>
+                    <button class="v050-tab" data-v050-company-tab="cash" type="button">Caisse</button>
+                    <button class="v050-tab" data-v050-company-tab="accounting" type="button">Comptabilité</button>
+                </div>
+                <div id="v050CompanyDossierBody" class="v050-company-dossier-body">
+                    <p class="muted">Ouvrez Lucas Optical, Phil&amp;Joe ou une autre société pour afficher son cockpit complet.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="bankPage" class="page-section">
+            <div class="topbar">
+                <div>
+                    <h1>Banque</h1>
+                    <p>Importez les relevés, pointez les opérations et ajoutez les justificatifs.</p>
+                </div>
+                <div class="statement-actions">
+                    <button id="smartReceipt" style="display:none;">Pointer PJ</button>
+                    <button id="importStatement">Importer des relevés PDF</button>
+                </div>
+            </div>
+
+            <div class="bank-layout">
+                <section class="panel sidebar-panel bank-company-panel compact-company-panel">
+                    <h2>Contexte</h2>
+                    <p id="selectedCompanyTitle" class="muted">Aucune société sélectionnée</p>
+                    <p id="bankImportHintV0251" class="muted import-hint-v0251">Tu peux importer plusieurs relevés : Focus Compta les affectera automatiquement au bon compte.</p>
+
+                    <div id="bankSection" style="display:none;">
+                        <div class="section-title-row">
+                            <h2>Comptes bancaires</h2>
+                            <button id="toggleBankForm" class="secondary-button small-button">+ Ajouter</button>
+                        </div>
+
+                        <div id="bankAccountList" class="bank-account-cards"></div>
+
+                        <div id="bankAccountForm" class="bank-account-form" style="display:none;">
+                            <h3>Nouveau compte</h3>
+                            <div class="form-grid compact-form">
+                                <input id="bankName" type="text" placeholder="Banque, ex : Crédit Agricole">
+                                <input id="accountName" type="text" placeholder="Nom du compte">
+                                <input id="accountNumber" type="text" placeholder="Numéro de compte">
+                                <input id="iban" type="text" placeholder="IBAN">
+                                <input id="bic" type="text" placeholder="BIC">
+                                <button id="newBankAccount">Ajouter le compte</button>
+                            </div>
+                        </div>
+
+                        <div id="bankAccountEdit" class="bank-account-form" style="display:none;">
+                            <h3>Modifier le compte</h3>
+                            <input id="editBankName" type="text" placeholder="Banque">
+                            <input id="editAccountName" type="text" placeholder="Nom du compte">
+                            <input id="editAccountNumber" type="text" placeholder="Numéro de compte">
+                            <input id="editIban" type="text" placeholder="IBAN">
+                            <input id="editBic" type="text" placeholder="BIC">
+                            <textarea id="editBankNotes" rows="3" placeholder="Notes"></textarea>
+                            <div class="rib-row">
+                                <span id="editRibLabel" class="muted">Aucun RIB enregistré.</span>
+                                <button id="selectRib" class="secondary-button">Ajouter / remplacer le RIB</button>
+                            </div>
+                            <div class="button-row">
+                                <button id="saveBankAccount">Enregistrer</button>
+                                <button id="cancelBankEdit" class="secondary-button">Fermer</button>
+                                <button id="openRib" class="secondary-button">Ouvrir RIB</button>
+                                <button id="deleteBankAccount" class="danger-button">Supprimer</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="statementSidebar" class="statement-sidebar" style="display:none;">
+                        <h2>Relevés</h2>
+                        <button id="importStatementSidebar" class="primary-wide">Importer des relevés PDF</button>
+                        <label for="statementSelect">Relevé sélectionné</label>
+                        <select id="statementSelect">
+                            <option value="all">Tous les relevés</option>
+                        </select>
+                        <p id="statementMeta" class="muted">Aucun relevé sélectionné.</p>
+                        <div class="statement-sidebar-buttons">
+                            <button id="openSelectedStatement" disabled>Ouvrir</button>
+                            <button id="deleteSelectedStatement" class="danger-button" disabled>Supprimer</button>
+                        </div>
+                        <div id="statementBulkToolsV0409" class="statement-bulk-tools-v0409" style="display:none;">
+                            <label><input id="selectAllStatementsV0409" type="checkbox"> Sélectionner les relevés visibles</label>
+                            <div id="statementBulkListV0409" class="statement-bulk-list-v0409"></div>
+                            <div class="statement-bulk-actions-v0409">
+                                <button id="deleteSelectedStatementsV0409" class="danger-button" disabled>Supprimer la sélection</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel operations-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2 id="selectedAccountTitle">Sélectionne un compte bancaire</h2>
+                            <p class="muted">Opérations bancaires</p>
+                        </div>
+                    </div>
+
+                    <div id="summaryCards" class="summary-cards" style="display:none;">
+                        <div class="summary-card"><span>Opérations</span><strong id="summaryTotal">0</strong></div>
+                        <div class="summary-card success"><span>Justifiées</span><strong id="summaryAttached">0</strong></div>
+                        <div class="summary-card danger"><span>Manquantes</span><strong id="summaryMissing">0</strong></div>
+                        <div class="summary-card"><span>Crédits</span><strong id="summaryCredit">0 €</strong></div>
+                        <div class="summary-card"><span>Débits</span><strong id="summaryDebit">0 €</strong></div>
+                    </div>
+
+                    <div id="toolsPanel" class="tools-panel" style="display:none;">
+                        <div class="tool-field wide">
+                            <label>Recherche</label>
+                            <input id="searchInput" type="text" placeholder="Libellé, montant, catégorie, note, relevé...">
+                        </div>
+                        <div class="tool-field"><label>Année</label><select id="yearFilter"><option value="all">Toutes</option></select></div>
+                        <div class="tool-field"><label>Mois</label><select id="monthFilter"><option value="all">Tous</option></select></div>
+                        <div class="tool-field">
+                            <label>Statut</label>
+                            <select id="statusFilter">
+                                <option value="all">Tous</option>
+                                <option value="missing">Justificatif manquant</option>
+                                <option value="attached">Pièce jointe</option>
+                                <option value="verified">Vérifié</option>
+                                <option value="review">À vérifier</option>
+                                <option value="ignored">Ignoré</option>
+                            </select>
+                        </div>
+                        <div class="tool-field button-field"><button id="resetFilters">Réinitialiser</button></div>
+                    </div>
+
+                    <div id="bulkToolbar" class="bulk-toolbar" style="display:none;">
+                        <strong><span id="bulkCount">0</span> opération(s) sélectionnée(s)</strong>
+                        <select id="bulkCategory"><option value="">Catégorie...</option></select>
+                        <select id="bulkStatus">
+                            <option value="">Statut...</option>
+                            <option value="missing">Justificatif manquant</option>
+                            <option value="attached">Pièce jointe</option>
+                            <option value="verified">Vérifié</option>
+                            <option value="review">À vérifier</option>
+                            <option value="ignored">Ignoré</option>
+                        </select>
+                        <input id="bulkNotes" placeholder="Note à appliquer">
+                        <button id="applyBulkUpdate">Appliquer</button>
+                        <button id="clearSelection" class="secondary-button">Désélectionner</button>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table id="transactionTable" class="bank-table" style="display:none;">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllTransactions"></th>
+                                    <th><button type="button" class="sort-th" data-bank-sort="date">Date <span class="sort-arrow">↓</span></button></th>
+                                    <th><button type="button" class="sort-th" data-bank-sort="label">Libellé <span class="sort-arrow">↕</span></button></th>
+                                    <th><button type="button" class="sort-th" data-bank-sort="amount">Montant <span class="sort-arrow">↕</span></button></th>
+                                    <th><button type="button" class="sort-th" data-bank-sort="category">Catégorie <span class="sort-arrow">↕</span></button></th>
+                                    <th><button type="button" class="sort-th" data-bank-sort="status">Statut <span class="sort-arrow">↕</span></button></th>
+                                    <th title="Justificatifs">📎</th>
+                                    <th title="Relevé source">📄</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactionTableBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="panel detail-panel" id="detailPanel">
+                    <div class="detail-panel-header">
+                        <h2>Détail opération</h2>
+                        <button id="closeDetailPanel" class="icon-button drawer-close" title="Fermer">×</button>
+                    </div>
+                    <div id="transactionDetailEmpty" class="empty-state">Sélectionne une opération pour la pointer ou ajouter un justificatif.</div>
+                    <div id="transactionDetail" style="display:none;">
+                        <div class="detail-block"><span class="muted">Date</span><strong id="detailDate"></strong></div>
+                        <div class="detail-block"><span class="muted">Libellé</span><strong id="detailLabel"></strong></div>
+                        <div class="detail-block"><span class="muted">Montant</span><strong id="detailAmount"></strong></div>
+                        <div class="detail-block"><span class="muted">Relevé source</span><strong id="detailStatement"></strong></div>
+                        <label>Statut</label>
+                        <select id="detailStatus">
+                            <option value="missing">Justificatif manquant</option>
+                            <option value="attached">Pièce jointe</option>
+                            <option value="verified">Vérifié</option>
+                            <option value="review">À vérifier</option>
+                            <option value="ignored">Ignoré</option>
+                        </select>
+                        <label>Catégorie</label>
+                        <select id="detailCategory"><option value="">Non catégorisé</option></select>
+                        <label>Notes</label>
+                        <textarea id="detailNotes" rows="4" placeholder="Note interne pour le pointage ou l'expert-comptable"></textarea>
+                        <div class="button-row">
+                            <button id="saveTransactionDetails">Enregistrer</button>
+                            <button id="addReceipt">Ajouter justificatif</button>
+                        </div>
+                        <h3>Justificatifs</h3>
+                        <div id="receiptPreview" class="receipt-preview muted">Aucun aperçu sélectionné.</div>
+                        <ul id="receiptList" class="receipt-list"></ul>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <section id="receiptsPage" class="page-section">
+            <div class="topbar documents-topbar-v033">
+                <div>
+                    <h1>Documents</h1>
+                    <p>GED Focus Compta : classement, aperçu PDF, recherche, non classés et corbeille.</p>
+                </div>
+                <div class="button-row">
+                    <button id="newDocumentFolderV033" class="secondary-button">Nouveau dossier</button>
+                    <button id="showUnclassifiedV034" class="secondary-button">Non classés</button>
+                    <button id="showTrashV034" class="secondary-button">Corbeille</button>
+                    <button id="importDocuments">Importer des documents</button>
+                </div>
+            </div>
+
+            <div class="document-kpis-v033">
+                <article><span>Total documents</span><strong id="docsKpiTotalV033">0</strong></article>
+                <article><span>Relevés</span><strong id="docsKpiStatementsV033">0</strong></article>
+                <article><span>Documents</span><strong id="docsKpiDocsV033">0</strong></article>
+                <article><span>RIB</span><strong id="docsKpiRibV033">0</strong></article>
+                <article><span>Contrats</span><strong id="docsKpiContractsV033">0</strong></article>
+            </div>
+
+            <div class="document-toolbar-v033">
+                <input id="documentSearch" type="text" placeholder="Rechercher un document...">
+                <select id="documentTypeFilter">
+                    <option value="all">Type : Tous</option>
+                    <option value="facture">Facture fournisseur</option>
+                    <option value="facture_client">Facture client</option>
+                    <option value="avoir">Avoir</option>
+                    <option value="releve">Relevé bancaire</option>
+                    <option value="contrat">Contrat</option>
+                    <option value="administratif">Administratif</option>
+                    <option value="informatif">Informatif</option>
+                    <option value="don">Don</option>
+                    <option value="rib">RIB</option>
+                    <option value="divers">Divers</option>
+                </select>
+                <select id="documentYearFilterV033">
+                    <option value="all">Année : Toutes</option>
+                </select>
+                <button id="refreshDocumentTreeV033" class="secondary-button">Actualiser</button>
+            </div>
+
+            <div id="documentSmartFoldersV035" class="document-smart-folders-v035">
+                <button data-smart-folder="favorites">⭐ Favoris <span id="smartFavCountV035">0</span></button>
+                <button data-smart-folder="unclassified">📥 Non classés <span id="smartUnclassifiedCountV035">0</span></button>
+                <button data-smart-folder="duplicates">⚠️ Doublons <span id="smartDuplicatesCountV035">0</span></button>
+                <button data-smart-folder="unmatched">🔗 À rapprocher <span id="smartUnmatchedCountV035">0</span></button>
+                <button data-smart-folder="contracts">📑 Contrats <span id="smartContractsCountV035">0</span></button>
+                <button data-smart-folder="recent">🕒 Récents</button>
+            </div>
+
+            <div class="documents-dropbox-v033">
+                <aside class="panel document-tree-panel-v033">
+                    <div class="section-title-row">
+                        <h2>Arborescence</h2>
+                    </div>
+                    <input id="documentTreeSearchV036" class="tree-search-v036" placeholder="Rechercher dossier...">
+                    <div id="documentTreeV033" class="document-tree-v033"></div>
+                    <div class="storage-v033">
+                        <span>Espace utilisé : GED locale</span>
+                        <div><span></span></div>
+                    </div>
+                </aside>
+
+                <section class="panel document-files-panel-v033">
+                    <div class="document-breadcrumb-v033" id="documentBreadcrumbV033">Tous les documents</div>
+                    <div id="documentFolderFilesV033" class="document-table-v033"></div>
+                    <div class="document-bottom-actions-v033">
+                        <button id="openSelectedDocumentV033">Ouvrir</button>
+                        <button id="previewSelectedDocumentV033">Aperçu</button>
+                        <button id="renameSelectedDocumentV033">Renommer</button>
+                        <button id="moveSelectedDocumentV033">Déplacer</button>
+                        <button id="favoriteSelectedDocumentV035">Favori</button>
+                        <button id="importantSelectedDocumentV037">Important</button>
+                        <button id="downloadSelectedDocumentV033">Télécharger</button>
+                        <button id="deleteSelectedDocumentV033" class="danger-button">Supprimer</button>
+                    </div>
+                </section>
+
+                <aside class="panel document-preview-panel-v033">
+                    <div class="section-title-row">
+                        <h2 id="documentPreviewTitleV033">Aperçu</h2>
+                        <button id="closeDocumentPreviewV033" class="secondary-button small-button">×</button>
+                    </div>
+                    <div class="document-preview-tabs-v033">
+                        <button class="active" data-preview-tab="preview">Aperçu</button>
+                        <button data-preview-tab="info">Informations</button>
+                        <button data-preview-tab="ocr">OCR</button>
+                        <button data-preview-tab="links">Liens</button>
+                    </div>
+                    <div id="documentPreviewV033" class="document-preview-v033 empty-state">Sélectionne un document.</div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="matchingPage" class="page-section">
+            <div class="topbar">
+                <div><h1>Rapprochements</h1><p>Traitez rapidement les documents non rapprochés avec suggestions et recherche manuelle.</p></div>
+            </div>
+            <div class="matching-layout-v030">
+                <section class="panel">
+                    <h2>Documents à rapprocher</h2>
+                    <div id="matchingDocumentList" class="document-list compact-document-list-v030"></div>
+                </section>
+                <section class="panel">
+                    <h2>Suggestions</h2>
+                    <p id="matchingHelp" class="muted">Sélectionne un document à gauche.</p>
+                    <div id="matchingSuggestionList" class="document-match-list"></div>
+                </section>
+                <section class="panel">
+                    <h2>Aperçu / informations</h2>
+                    <div id="matchingPreview" class="empty-state">Aucun document sélectionné.</div>
+                </section>
+            </div>
+        </section>
+
+        <section id="thirdPartiesPage" class="page-section">
+            <div class="topbar">
+                <div><h1>Tiers</h1><p>Référentiel central des fournisseurs, clients, banques et organismes détectés.</p></div>
+            </div>
+            <div class="panel clean-panel">
+                <div id="thirdPartiesSummary" class="muted">Sélectionne une société pour voir les tiers.</div>
+                <div id="thirdPartiesList" class="third-party-grid-v030"></div>
+            </div>
+        </section>
+
+        <section id="accountingPage" class="page-section accounting-page-v047 accounting-page-v073 accounting-page-v0825">
+            <div class="topbar accounting-topbar-v047">
+                <div>
+                    <h1>Comptabilité</h1>
+                    <p>Centre comptable organisé : contrôles, TVA, dossier expert et prévisions.</p>
+                </div>
+                <div class="button-row">
+                    <button id="refreshAccountingControlV047" type="button" class="secondary-button">Actualiser</button>
+                    <button id="goAccountingExportV047" type="button">Créer un export</button>
+                </div>
+            </div>
+
+            <div class="accounting-filters-v047 panel clean-panel accounting-filter-row-v0825">
+                <label>Année
+                    <input id="accountingControlYearV047" type="number" min="2020" max="2100" />
+                </label>
+                <label>Mois d'archive
+                    <select id="accountingControlMonthV047">
+                        <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option><option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
+                        <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option><option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                    </select>
+                </label>
+                <span id="accountingControlCompanyV047" class="muted">Sélectionne une société.</span>
+            </div>
+
+            <nav class="accounting-tabs-v0825" aria-label="Onglets Comptabilité">
+                <button class="accounting-tab-v0825 active" type="button" data-accounting-tab="controls">Contrôles</button>
+                <button class="accounting-tab-v0825" type="button" data-accounting-tab="vat">TVA</button>
+                <button class="accounting-tab-v0825" type="button" data-accounting-tab="expert">Dossier Expert</button>
+                <button class="accounting-tab-v0825" type="button" data-accounting-tab="forecast">Prévisions</button>
+            </nav>
+
+            <div class="accounting-tab-panels-v0825">
+                <section class="accounting-tab-panel-v0825 active" data-accounting-panel="controls">
+                    <div class="accounting-tab-intro-v0825 panel clean-panel">
+                        <div>
+                            <span class="eyebrow">Contrôles</span>
+                            <h2>Santé comptable</h2>
+                            <p class="muted">Banque, documents, TVA, caisse et rapprochements regroupés dans un seul espace de contrôle.</p>
+                        </div>
+                    </div>
+
+                    <div id="accountingHealthV047" class="accounting-health-v047"></div>
+
+                    <div class="accounting-grid-v047">
+                        <section class="panel clean-panel accounting-card-v047">
+                            <div class="accounting-card-head-v047"><h2>Contrôle documentaire</h2><button data-accounting-open="receiptsPage" type="button" class="link-button-v047">Ouvrir documents</button></div>
+                            <div id="accountingDocumentsV047" class="accounting-card-body-v047 muted">Chargement…</div>
+                        </section>
+
+                        <section class="panel clean-panel accounting-card-v047">
+                            <div class="accounting-card-head-v047"><h2>Contrôle bancaire</h2><button data-accounting-open="matchingPage" type="button" class="link-button-v047">Ouvrir rapprochements</button></div>
+                            <div id="accountingBankV047" class="accounting-card-body-v047 muted">Chargement…</div>
+                        </section>
+
+                        <section class="panel clean-panel accounting-card-v047">
+                            <div class="accounting-card-head-v047"><h2>Contrôle TVA</h2><button data-accounting-tab-jump="vat" type="button" class="link-button-v047">Ouvrir TVA</button></div>
+                            <div id="accountingVatV047" class="accounting-card-body-v047 muted">Chargement…</div>
+                        </section>
+                    </div>
+
+                    <section class="panel clean-panel accounting-wide-v047">
+                        <div class="accounting-card-head-v047"><h2>Alertes prioritaires</h2><span id="accountingScoreTextV047" class="muted"></span></div>
+                        <div id="accountingAlertsV047" class="accounting-alerts-v047 muted">Chargement…</div>
+                    </section>
+                </section>
+
+                <section class="accounting-tab-panel-v0825" data-accounting-panel="vat">
+                    <section id="vatCenterV073" class="panel clean-panel vat-center-v073">
+                        <div class="accounting-card-head-v047">
+                            <div>
+                                <span class="eyebrow">Centre TVA</span>
+                                <h2>TVA collectée / déductible</h2>
+                                <p class="muted">Suivi mensuel indicatif : TVA nette collectée depuis la caisse et TVA déductible depuis les factures fournisseurs.</p>
+                            </div>
+                            <div class="button-row">
+                                <button id="refreshVatCenterV073" type="button" class="secondary-button">Actualiser TVA</button>
+                                <button id="exportVatCsvV073" type="button">Exporter CSV</button>
+                            </div>
+                        </div>
+                        <div id="vatKpisV073" class="vat-kpi-grid-v073 muted">Chargement TVA…</div>
+                        <div id="vatChartV073" class="vat-chart-v073"></div>
+                        <div id="vatTableV073" class="vat-table-wrap-v073 muted">Chargement…</div>
+                    </section>
+                </section>
+
+                <section class="accounting-tab-panel-v0825" data-accounting-panel="expert">
+                    <div class="accounting-tab-intro-v0825 panel clean-panel">
+                        <div>
+                            <span class="eyebrow">Dossier Expert</span>
+                            <h2>Préparation et transmission comptable</h2>
+                            <p class="muted">L’objectif est de générer un mois propre pour l’expert-comptable : documents, relevés, TVA, caisse et archives.</p>
+                        </div>
+                    </div>
+
+                    <div class="accounting-grid-v047">
+                        <section class="panel clean-panel accounting-card-v047">
+                            <div class="accounting-card-head-v047"><h2>Transmission comptable</h2><button id="previewAccountingFromControlV047" type="button" class="link-button-v047">Prévisualiser</button></div>
+                            <div id="accountingTransmissionV047" class="accounting-card-body-v047 muted">Chargement…</div>
+                        </section>
+
+                        <section class="panel clean-panel accounting-card-v047">
+                            <div class="accounting-card-head-v047"><h2>Archives comptables</h2><button id="previewArchiveFromControlV047" type="button" class="link-button-v047">Voir le mois</button></div>
+                            <div id="accountingArchivesV047" class="accounting-card-body-v047 muted">Chargement…</div>
+                        </section>
+                    </div>
+
+                    <section class="panel clean-panel accounting-wide-v047">
+                        <div class="accounting-card-head-v047"><h2>Historique des lots comptables</h2><button id="refreshAccountingLotsV047" type="button" class="link-button-v047">Actualiser</button></div>
+                        <div id="accountingLotsV047" class="muted">Aucun lot chargé.</div>
+                    </section>
+                </section>
+
+                <section class="accounting-tab-panel-v0825" data-accounting-panel="forecast">
+                    <section class="panel clean-panel accounting-wide-v047 finance-intelligence-v049 finance-intelligence-v0825">
+                        <div class="accounting-card-head-v047">
+                            <div>
+                                <span class="eyebrow">Prévisions</span>
+                                <h2>Pilotage financier</h2>
+                                <p class="muted">Trésorerie prévisionnelle, factures à payer, fournisseurs et charges par catégorie.</p>
+                            </div>
+                        </div>
+                        <div id="financeExecutiveSummaryV049" class="finance-summary-grid-v049 muted">Chargement…</div>
+                        <div class="finance-grid-v049 finance-grid-v0825">
+                            <section>
+                                <h3>Prévisionnel trésorerie</h3>
+                                <div id="financeCashForecastV049" class="muted">Chargement…</div>
+                            </section>
+                            <section>
+                                <h3>Top fournisseurs</h3>
+                                <div id="financeSuppliersV049" class="muted">Chargement…</div>
+                            </section>
+                            <section>
+                                <h3>Charges par catégorie</h3>
+                                <div id="financeChargesV049" class="muted">Chargement…</div>
+                            </section>
+                        </div>
+                    </section>
+                </section>
+            </div>
+        </section>
+
+        <section id="exportsPage" class="page-section exports-page-v0456">
+            <div class="topbar">
+                <div><h1>Exports comptables</h1><p>Transmission comptable, relevés bancaires du mois et archives mensuelles régénérables.</p></div>
+            </div>
+            <div class="exports-grid-v0456">
+                <section class="panel clean-panel">
+                    <h2>Export comptable à transmettre</h2>
+                    <p class="muted">Inclut tous les documents comptables non transmis, même s’ils appartiennent à un ancien mois, ainsi que les relevés bancaires de la période choisie.</p>
+                    <div class="export-controls-v0456">
+                        <label>Année <input id="accountingExportYearV0456" type="number" min="2020" max="2100"></label>
+                        <label>Mois <select id="accountingExportMonthV0456">
+                            <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option><option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
+                            <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option><option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                        </select></label>
+                        <button id="previewAccountingExportV0456" class="secondary-button" type="button">Prévisualiser</button>
+                        <button id="createAccountingExportV0456" type="button">Créer ZIP + marquer transmis</button>
+                    </div>
+                    <div id="accountingExportPreviewV0456" class="export-preview-v0456 muted">Prévisualisation en attente.</div>
+                </section>
+
+                <section class="panel clean-panel">
+                    <h2>Archive comptable mensuelle</h2>
+                    <p class="muted">Régénère un ZIP complet d’un mois comptable déjà classé : documents du mois + relevés bancaires, qu’ils aient déjà été transmis ou non.</p>
+                    <div class="export-controls-v0456">
+                        <label>Année <input id="accountingArchiveYearV0456" type="number" min="2020" max="2100"></label>
+                        <label>Mois <select id="accountingArchiveMonthV0456">
+                            <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option><option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
+                            <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option><option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                        </select></label>
+                        <button id="previewAccountingArchiveV0456" class="secondary-button" type="button">Prévisualiser</button>
+                        <button id="createAccountingArchiveV0456" type="button">Créer ZIP archive</button>
+                    </div>
+                    <div id="accountingArchivePreviewV0456" class="export-preview-v0456 muted">Prévisualisation en attente.</div>
+                </section>
+            </div>
+            <section class="panel clean-panel">
+                <h2>Historique des lots</h2>
+                <div id="accountingExportLotsV0456" class="muted">Aucun lot chargé.</div>
+            </section>
+        </section>
+
+        <section id="settingsPage" class="page-section settings-page-v043">
+            <div class="topbar"><div><h1>Paramètres</h1><p>Moteur technique : données, listes, référentiel tiers, règles et maintenance.</p></div></div>
+
+            <div class="settings-layout-v043">
+                <aside class="settings-sidebar-v043">
+                    <button type="button" class="settings-tab-v043 active" data-settings-tab="data">💾 Données</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="lists">🏷️ Listes</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="bankRules">🏦 Règles banque</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="thirdPartyRef">🧠 Référentiel tiers</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="businessRules">⚙️ Règles métier</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="documentLearning">🧾 Apprentissage documents</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="maintenance">🛠️ Maintenance</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="storageV085">☁️ Stockage OVH S3</button>
+                    <button type="button" class="settings-tab-v043" data-settings-tab="interface">🎛️ Interface</button>
+                </aside>
+
+                <div class="settings-content-v043">
+                    <div class="settings-panel-v043 active" data-settings-panel="data">
+                        <div class="panel clean-panel">
+                            <h2>Données & sauvegardes</h2>
+                            <p class="muted">Zone sécurisée pour ouvrir le dossier de données, sauvegarder et contrôler l’état général de la base.</p>
+                            <div class="button-row">
+                                <button id="openDataFolderSettings">Ouvrir FocusComptaData</button>
+                                <button id="createBackupSettings">Créer une sauvegarde locale</button>
+                                <button id="refreshTechnicalSnapshotV043" type="button">Actualiser l’état</button>
+                            </div>
+                            <div id="technicalSnapshotV043" class="technical-snapshot-v043 muted">Chargement de l’état technique…</div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="storageV085">
+                        <div class="panel clean-panel">
+                            <h2>Stockage documents — Desktop + OVH S3</h2>
+                            <p class="muted">Cette version prépare le logiciel Windows : base SQLite locale, cache local et documents prêts à être envoyés sur OVH Object Storage compatible S3.</p>
+                            <div id="storageStatusV085" class="technical-snapshot-v043 muted">Chargement du statut stockage…</div>
+                            <div class="form-grid compact-form">
+                                <label>Mode
+                                    <select id="storageModeV085">
+                                        <option value="local">Local uniquement</option>
+                                        <option value="s3">OVH S3 privé</option>
+                                    </select>
+                                </label>
+                                <label>Endpoint OVH
+                                    <input id="ovhEndpointV085" placeholder="https://s3.gra.io.cloud.ovh.net">
+                                </label>
+                                <label>Région
+                                    <input id="ovhRegionV085" placeholder="gra">
+                                </label>
+                                <label>Bucket
+                                    <input id="ovhBucketV085" placeholder="focus-compta-documents">
+                                </label>
+                                <label>Access Key
+                                    <input id="ovhAccessKeyV085" autocomplete="off">
+                                </label>
+                                <label>Secret Key
+                                    <input id="ovhSecretKeyV085" type="password" autocomplete="new-password" placeholder="laisser vide pour conserver">
+                                </label>
+                            </div>
+                            <div class="button-row">
+                                <button id="saveStorageSettingsV085" type="button">Enregistrer la configuration</button>
+                                <button id="testOvhS3V085" type="button" class="secondary-button">Tester la connexion</button>
+                                <button id="openUserDataFolderV085" type="button" class="secondary-button">Ouvrir le dossier utilisateur</button>
+                            </div>
+                            <div id="storageTestResultV085" class="muted">En attente.</div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="lists">
+                        <div class="panel clean-panel settings-list-panel-v0405">
+                            <h2>Listes métier</h2>
+                            <p class="muted">Catégories, statuts et types utilisés par Banque, Tiers et les règles automatiques.</p>
+                            <div class="settings-lists-grid-v0405">
+                                <div>
+                                    <h3>Catégories</h3>
+                                    <div class="inline-editor-v0405">
+                                        <input id="settingsCategoryInputV0405" placeholder="Nouvelle catégorie, ex : Électricité">
+                                        <button id="addSettingsCategoryV0405" type="button">Ajouter</button>
+                                    </div>
+                                    <ul id="settingsCategoriesListV0405" class="mini-list editable-list-v0405"></ul>
+                                </div>
+                                <div>
+                                    <h3>Statuts</h3>
+                                    <div class="inline-editor-v0405">
+                                        <input id="settingsStatusLabelV0405" placeholder="Libellé, ex : Validé expert">
+                                        <input id="settingsStatusCodeV0405" placeholder="Code optionnel">
+                                        <button id="addSettingsStatusV0405" type="button">Ajouter</button>
+                                    </div>
+                                    <ul id="settingsStatusesListV0405" class="mini-list editable-list-v0405"></ul>
+                                </div>
+                                <div>
+                                    <h3>Types de tiers</h3>
+                                    <p class="muted">Les types sont enrichis automatiquement depuis les tiers existants. Ils pilotent les règles métier.</p>
+                                    <div id="thirdPartyTypesSettingsV043" class="chips-v043"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="bankRules">
+                        <div class="panel clean-panel">
+                            <h2>Catégories automatiques</h2>
+                            <p class="muted">Règles simples par mot-clé. Elles servent au classement initial des opérations.</p>
+                            <div class="form-grid compact-form">
+                                <input id="categoryKeyword" placeholder="Mot clé, ex : EDF">
+                                <input id="categoryName" list="settingsCategoriesDatalistV0405" placeholder="Catégorie, ex : Électricité">
+                                <button id="addCategoryRule">Ajouter / mettre à jour</button>
+                            </div>
+                            <ul id="categoryRulesList" class="mini-list"></ul>
+                        </div>
+
+                        <div class="panel clean-panel automation-panel-v0404">
+                            <h2>Automatisation bancaire</h2>
+                            <p class="muted">Focus Compta apprend de tes corrections et propose ensuite les catégories automatiquement.</p>
+                            <div id="automationStatsV072" class="automation-stats-v072 muted">Chargement des statistiques…</div>
+                            <div class="quick-rule-row-v0404">
+                                <button type="button" class="quick-rule-v0404" data-target="account_name" data-keyword="Tiers-Payant" data-category="Tiers-payant" data-status="verified">+ Tiers-Payant → validé</button>
+                                <button type="button" class="quick-rule-v0404" data-target="label" data-keyword="EDF" data-category="Électricité" data-status="review">+ EDF → électricité</button>
+                                <button type="button" class="quick-rule-v0404" data-target="label" data-keyword="frais bancaires" data-category="Frais bancaires" data-status="ignored">+ frais bancaires → sans justificatif</button>
+                            </div>
+                            <div class="form-grid compact-form automation-form-v0404">
+                                <select id="automationTargetV0404" title="Champ analysé">
+                                    <option value="all">Compte + libellé + tiers</option>
+                                    <option value="account_name">Nom du compte</option>
+                                    <option value="label">Libellé opération</option>
+                                    <option value="third_party_name">Fournisseur / tiers</option>
+                                </select>
+                                <input id="automationKeywordV031" placeholder="Contient, ex : EDF">
+                                <input id="automationCategoryV031" list="settingsCategoriesDatalistV0405" placeholder="Catégorie, ex : Électricité">
+                                <input id="automationThirdPartyV0404" placeholder="Tiers, optionnel">
+                                <select id="automationStatusV031">
+                                    <option value="">Ne pas changer le statut</option>
+                                    <option value="verified">Validé</option>
+                                    <option value="attached">Pièce jointe</option>
+                                    <option value="missing">Justificatif manquant</option>
+                                    <option value="review">À vérifier</option>
+                                    <option value="ignored">Validé sans justificatif</option>
+                                </select>
+                                <button id="addAutomationRuleV031" type="button">Ajouter règle</button>
+                                <button id="applyAutomationRulesV031" type="button">Appliquer maintenant</button>
+                            </div>
+                            <ul id="automationRulesListV031" class="mini-list automation-rules-list-v0404"></ul>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="thirdPartyRef">
+                        <div class="panel clean-panel">
+                            <h2>Référentiel tiers</h2>
+                            <p class="muted">Ici on gère le moteur intelligent : tiers canonisés, alias, fusion automatique et exceptions.</p>
+                            <div class="settings-ref-grid-v043">
+                                <div>
+                                    <h3>Tiers canonisés</h3>
+                                    <div class="inline-editor-v0405">
+                                        <input id="canonicalThirdPartyNameV043" placeholder="Ex : SwissLife">
+                                        <select id="canonicalThirdPartyTypeV043"></select>
+                                        <button id="saveCanonicalThirdPartyV043" type="button">Ajouter / mettre à jour</button>
+                                    </div>
+                                    <div id="canonicalThirdPartiesListV043" class="settings-table-wrap-v043 muted">Chargement…</div>
+                                </div>
+                                <div>
+                                    <h3>Alias</h3>
+                                    <div class="inline-editor-v0405">
+                                        <input id="thirdPartyAliasLabelV043" placeholder="Ex : Swisslife TP">
+                                        <input id="thirdPartyAliasCanonicalV043" placeholder="Vers : SwissLife">
+                                        <select id="thirdPartyAliasTypeV043"></select>
+                                        <select id="thirdPartyAliasModeV043">
+                                            <option value="merge">Toujours fusionner</option>
+                                            <option value="split">Ne pas refusionner</option>
+                                        </select>
+                                        <button id="saveThirdPartyAliasV043" type="button">Enregistrer alias</button>
+                                    </div>
+                                    <div id="thirdPartyAliasesListV043" class="settings-table-wrap-v043 muted">Chargement…</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="businessRules">
+                        <div class="panel clean-panel">
+                            <h2>Règles métier</h2>
+                            <p class="muted">Ces règles traduisent les types de tiers en catégorie, statut et besoin de justificatif.</p>
+                            <table class="settings-rules-table-v043">
+                                <thead><tr><th>Type tiers</th><th>Catégorie automatique</th><th>Statut</th><th>Justificatif</th></tr></thead>
+                                <tbody>
+                                    <tr><td>Mutuelle / Tiers-payant</td><td>Tiers-Payant</td><td>Vérifié</td><td>Non requis</td></tr>
+                                    <tr><td>Banque</td><td>Banque / Frais bancaires</td><td>Vérifié ou sans justificatif</td><td>Selon règle</td></tr>
+                                    <tr><td>Administration</td><td>Charges / Fiscalité</td><td>À vérifier</td><td>Selon montant</td></tr>
+                                    <tr><td>Fournisseur</td><td>Catégorie détectée</td><td>Justificatif manquant</td><td>Oui</td></tr>
+                                </tbody>
+                            </table>
+                            <div class="button-row">
+                                <button id="applyBusinessRulesSettingsV043" type="button">Appliquer aux opérations existantes</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="documentLearning">
+                        <div class="panel clean-panel">
+                            <h2>Apprentissage documents</h2>
+                            <p class="muted">Corrections mémorisées après validation OCR. Le logiciel s'en sert pour mieux lire les prochaines factures similaires.</p>
+                            <div class="button-row">
+                                <button id="refreshDocumentLearningV0452" type="button">Actualiser</button>
+                                <button id="openDocumentsToValidateV0452" type="button">Voir les documents à valider</button>
+                            </div>
+                            <div id="documentLearningRulesV0452" class="settings-table-wrap-v043 muted">Chargement…</div>
+                            <h3>Documents à valider</h3>
+                            <div id="documentsToValidateV0452" class="settings-table-wrap-v043 muted">Clique sur “Voir les documents à valider”.</div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="maintenance">
+                        <div class="panel clean-panel">
+                            <h2>Maintenance</h2>
+                            <p class="muted">Outils de réparation et recalcul. À utiliser après un gros import ou une modification du référentiel.</p>
+                            <div class="settings-maintenance-grid-v043">
+                                <button id="maintenanceLightV043" type="button">Réparer léger</button>
+                                <button id="maintenanceThirdPartiesV043" type="button">Recalculer les tiers</button>
+                                <button id="maintenanceBusinessRulesV043" type="button">Réappliquer règles métier</button>
+                                <button id="maintenanceFullV043" type="button" class="danger-soft-v043">Maintenance complète</button>
+                            </div>
+                            <pre id="maintenanceResultV043" class="settings-log-v043">Aucune opération lancée.</pre>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel-v043" data-settings-panel="interface">
+                        <div class="panel clean-panel">
+                            <h2>Interface</h2>
+                            <p class="muted">Préférences locales. Elles n’altèrent pas les données comptables.</p>
+                            <label class="toggle-line-v043"><input type="checkbox" id="compactSettingsV043"> Affichage compact</label>
+                            <label class="toggle-line-v043"><input type="checkbox" id="hideImportDetailsV043"> Masquer le détail après un import réussi</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+<datalist id="settingsCategoriesDatalistV0405"></datalist>
+
+<script src="js/modules/focus-domain.js"></script>
+<script src="js/modules/core.js"></script>
+<script src="js/modules/banque.js"></script>
+<script src="js/modules/documents.js"></script>
+<script src="js/modules/rapprochements.js"></script>
+<script src="js/modules/tiers.js"></script>
+<script src="js/modules/dashboard.js"></script>
+<script src="js/modules/onboarding.js"></script>
+<script src="js/modules/parametres.js"></script>
+<script src="js/modules/exports.js"></script>
+<script src="js/modules/comptabilite.js"></script>
+<script src="js/modules/tva.js"></script>
+<script src="js/modules/caisse.js"></script>
+<script src="js/modules/v050.js"></script>
+<script src="js/modules/v0542.js"></script>
+<script src="js/modules/v055.js"></script>
+<script src="js/modules/v058.js"></script>
+<script src="js/modules/v0581.js"></script>
+<script src="js/modules/v059.js"></script>
+<script src="js/modules/v0592.js"></script>
+<script src="js/modules/v0601-navigation-stable.js"></script>
+<script src="js/modules/v080-foundation.js"></script>
+<script src="js/modules/v081-users-roles.js"></script>
+<script src="js/modules/v082-security-refresh.js"></script>
+<script src="js/modules/v0825-accounting-tabs.js"></script>
+<script src="js/modules/v083-expert-dossier.js"></script>
+<script src="js/modules/v0831-home-notes.js"></script>
+<script src="js/modules/v084-home-consolidated.js"></script>
+<script src="js/modules/v0842-polish-ui-notes.js"></script>
+<script src="renderer.js"></script>
+
+    <div id="documentContextMenuV037" class="context-menu-v037" style="display:none;"></div>
+
+    <div id="receiptMatchModalV0393" class="match-modal-v0393" style="display:none;">
+        <div class="match-modal-card-v0393">
+            <div class="match-modal-header-v0393">
+                <div>
+                    <h2>Pointer un justificatif</h2>
+                    <p id="matchModalSubtitleV0393"></p>
+                </div>
+                <button id="closeMatchModalV0393">×</button>
+            </div>
+            <div class="match-modal-body-v0393">
+                <section>
+                    <h3>Justificatif</h3>
+                    <div id="matchReceiptInfoV0393" class="match-receipt-info-v0393"></div>
+                    <iframe id="matchReceiptPreviewV0393" class="match-preview-v0393"></iframe>
+                </section>
+                <section>
+                    <h3>Opérations proposées</h3>
+                    <div id="matchOperationsV0393" class="match-operations-v0393"></div>
+                    <div class="match-modal-actions-v0393">
+                        <button id="confirmMatchV0393">Associer</button>
+                        <button id="cancelMatchV0393" class="secondary-button">Annuler</button>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="inputModalV0397" class="input-modal-v0397" style="display:none;">
+        <div class="input-modal-card-v0397">
+            <h2 id="inputModalTitleV0397">Saisie</h2>
+            <label id="inputModalLabelV0397" for="inputModalFieldV0397"></label>
+            <input id="inputModalFieldV0397" type="text">
+            <div class="button-row">
+                <button id="inputModalOkV0397">Valider</button>
+                <button id="inputModalCancelV0397" class="secondary-button">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="onboardingWizard" class="onboarding-modal" style="display:none;">
+        <div class="onboarding-card">
+            <div class="onboarding-header">
+                <div>
+                    <span class="eyebrow">Configuration initiale</span>
+                    <h2>Assistant de démarrage</h2>
+                    <p id="onboardingSubtitle">Prépare une société exploitable en quelques minutes.</p>
+                </div>
+                <button id="closeOnboardingWizard" class="icon-button" type="button">×</button>
+            </div>
+
+            <ol class="onboarding-steps" id="onboardingSteps">
+                <li data-step="0" class="active">Société</li>
+                <li data-step="1">Comptes</li>
+                <li data-step="2">Relevés</li>
+                <li data-step="3">Feuilles de caisse</li>
+            </ol>
+
+            <div class="onboarding-body">
+                <section class="onboarding-pane active" data-pane="0">
+                    <h3>1. Créer ou sélectionner une société</h3>
+                    <p class="muted">L’assistant utilisera cette société pour les comptes, relevés et feuilles de caisse.</p>
+                    <div class="form-row horizontal-form">
+                        <input id="onboardingCompanyName" type="text" placeholder="Nom de la société">
+                        <button id="onboardingCreateCompany" type="button">Créer et sélectionner</button>
+                    </div>
+                    <div id="onboardingCompanyChoices" class="onboarding-choice-list"></div>
+                </section>
+
+                <section class="onboarding-pane" data-pane="1">
+                    <h3>2. Ajouter les comptes bancaires</h3>
+                    <p class="muted" id="onboardingSelectedCompanyLabel">Aucune société sélectionnée.</p>
+                    <div class="form-grid compact-form">
+                        <input id="onboardingBankName" type="text" placeholder="Banque, ex : Crédit Agricole">
+                        <input id="onboardingAccountName" type="text" placeholder="Nom du compte">
+                        <input id="onboardingAccountNumber" type="text" placeholder="Numéro de compte">
+                        <input id="onboardingIban" type="text" placeholder="IBAN">
+                        <input id="onboardingBic" type="text" placeholder="BIC">
+                        <button id="onboardingAddAccount" type="button">Ajouter le compte</button>
+                    </div>
+                    <ul id="onboardingAccountList" class="mini-list"></ul>
+                </section>
+
+                <section class="onboarding-pane" data-pane="2">
+                    <h3>3. Importer les relevés bancaires</h3>
+                    <p class="muted">Les relevés PDF seront affectés aux comptes détectés par Focus Compta.</p>
+                    <div class="onboarding-action-row">
+                        <button id="onboardingImportStatements" type="button">Importer des relevés PDF</button>
+                        <button class="secondary-button" data-onboarding-page="bankPage" type="button">Voir la banque</button>
+                    </div>
+                    <div id="onboardingStatementStatus" class="onboarding-status muted">Aucun import lancé depuis l’assistant.</div>
+                </section>
+
+                <section class="onboarding-pane" data-pane="3">
+                    <h3>4. Importer les feuilles de caisse</h3>
+                    <p class="muted">Finalise la base dashboard : CA net TTC mensuel, trésorerie et alertes.</p>
+                    <div class="onboarding-action-row">
+                        <button id="onboardingImportCashSheets" type="button">Importer feuilles de caisse</button>
+                        <button class="secondary-button" data-onboarding-page="companiesPage" type="button">Voir la caisse société</button>
+                    </div>
+                    <div id="onboardingCashStatus" class="onboarding-status muted">Aucun import lancé depuis l’assistant.</div>
+                </section>
+            </div>
+
+            <div class="onboarding-footer">
+                <button id="onboardingPrev" class="secondary-button" type="button">Précédent</button>
+                <button id="onboardingNext" type="button">Suivant</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

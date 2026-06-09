@@ -1,0 +1,7 @@
+node_modules/
+FocusComptaData/
+FocusComptaBackups/
+*.db
+*.sqlite
+.DS_Store
+.env
